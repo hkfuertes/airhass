@@ -1,0 +1,22 @@
+<aircast>
+  <main_log>info</main_log>
+  <cast_log>info</cast_log>
+  <util_log>warn</util_log>
+  <log_limit>-1</log_limit>
+  <max_players>32</max_players>
+  <ports>0:0</ports>
+  <binding>en0</binding>
+  <ha_url>http://homeassistant.local:8123</ha_url>
+  <ha_token>PASTE_LONG_LIVED_ACCESS_TOKEN_HERE</ha_token>
+  <common>
+    <enabled>1</enabled>
+    <stop_receiver>0</stop_receiver>
+    <media_volume>0.5000</media_volume>
+    <latency></latency>
+    <drift>0</drift>
+    <codec>flac</codec>
+    <metadata>1</metadata>
+    <flush>1</flush>
+    <artwork></artwork>
+  </common>
+</aircast>
