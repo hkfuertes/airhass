@@ -290,6 +290,81 @@ int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out,
 }
 
 /*----------------------------------------------------------------------------*/
+bool ha_parse_media_player_state(const char *json, ha_media_player_state_t *out) {
+	json_error_t error;
+	json_t *root;
+	json_t *state;
+	json_t *attrs;
+	json_t *volume;
+	const char *state_str;
+
+	if (!out) return false;
+	memset(out, 0, sizeof(*out));
+
+	root = json_loads(json ? json : "", 0, &error);
+	if (!root || !json_is_object(root)) {
+		fprintf(stderr, "[ha] ERROR: cannot parse media_player state JSON: %s\n", error.text);
+		if (root) json_decref(root);
+		return false;
+	}
+
+	state = json_object_get(root, "state");
+	state_str = json_is_string(state) ? json_string_value(state) : "";
+	snprintf(out->state, sizeof(out->state), "%s", state_str);
+
+	attrs = json_object_get(root, "attributes");
+	volume = attrs ? json_object_get(attrs, "volume_level") : NULL;
+	if (json_is_real(volume) || json_is_integer(volume)) {
+		out->has_volume_level = true;
+		out->volume_level = ha_volume_level(json_number_value(volume));
+	}
+
+	json_decref(root);
+	return true;
+}
+
+/*----------------------------------------------------------------------------*/
+bool ha_fetch_media_player_state(const char *url, const char *token, const char *entity_id,
+                                 ha_media_player_state_t *out) {
+	char *body = NULL, line[128] = "", path[HA_ENTITY_ID_LEN + 32];
+	int status = 0;
+	bool ok = false;
+
+	if (!entity_id || !*entity_id || !out) return false;
+	if (snprintf(path, sizeof(path), "/api/states/%s", entity_id) >= (int) sizeof(path)) return false;
+	if (!ha_http_get(url, token, path, &body, &status, line, sizeof(line))) return false;
+	if (status == 401) {
+		fprintf(stderr, "[ha] ERROR: Home Assistant rejected the token (HTTP 401) for %s\n", url);
+		goto done;
+	}
+	if (status / 100 != 2) {
+		fprintf(stderr, "[ha] ERROR: Home Assistant %s failed: %s\n", path, *line ? line : "unknown response");
+		goto done;
+	}
+
+	ok = ha_parse_media_player_state(body, out);
+
+done:
+	free(body);
+	return ok;
+}
+
+/*----------------------------------------------------------------------------*/
+ha_raop_event_t ha_state_to_raop_event(const char *state, ha_raop_event_t current) {
+	if (state && !strcasecmp(state, "playing")) {
+		return current == HA_RAOP_PLAY ? HA_RAOP_NONE : HA_RAOP_PLAY;
+	}
+	if (state && !strcasecmp(state, "paused")) {
+		return current == HA_RAOP_PLAY ? HA_RAOP_PAUSE : HA_RAOP_NONE;
+	}
+	if (state && (!strcasecmp(state, "idle") || !strcasecmp(state, "off") || !strcasecmp(state, "unavailable"))) {
+		return current == HA_RAOP_STOP ? HA_RAOP_NONE : HA_RAOP_STOP;
+	}
+
+	return HA_RAOP_NONE;
+}
+
+/*----------------------------------------------------------------------------*/
 const char *ha_codec_extension(const char *codec_config) {
 	if (codec_config && strcasestr(codec_config, "mp3")) return "mp3";
 	if (codec_config && strcasestr(codec_config, "aac")) return "aac";

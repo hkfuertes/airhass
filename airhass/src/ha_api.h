@@ -9,10 +9,12 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #define HA_ENTITY_ID_LEN 256
 #define HA_ENTITY_NAME_LEN 256
 #define HA_ENTITY_UDN_LEN 256
+#define HA_STATE_LEN 32
 
 typedef struct {
 	char host[256];
@@ -25,6 +27,19 @@ typedef struct {
 	char name[HA_ENTITY_NAME_LEN];
 	char udn[HA_ENTITY_UDN_LEN];
 } ha_entity_t;
+
+typedef struct {
+	char state[HA_STATE_LEN];
+	bool has_volume_level;
+	double volume_level;
+} ha_media_player_state_t;
+
+typedef enum {
+	HA_RAOP_NONE = 0,
+	HA_RAOP_PLAY,
+	HA_RAOP_PAUSE,
+	HA_RAOP_STOP,
+} ha_raop_event_t;
 
 /* Parse http://host[:port][/path] into *out.
  * Returns false on bad scheme, empty url, or buffer overflow.
@@ -44,6 +59,19 @@ int ha_parse_media_players(const char *json, ha_entity_t *out, int max);
 /* Fetch /api/states and return filtered media_player.* entities.
  * Returns count on success, -1 on fetch/parse failure. */
 int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max);
+
+/* Parse Home Assistant /api/states/<entity_id> JSON into transport state + volume.
+ * Returns false on invalid JSON/object shape. */
+bool ha_parse_media_player_state(const char *json, ha_media_player_state_t *out);
+
+/* Fetch /api/states/<entity_id>.
+ * Returns true on HTTP 2xx + valid JSON. */
+bool ha_fetch_media_player_state(const char *url, const char *token, const char *entity_id,
+                                 ha_media_player_state_t *out);
+
+/* Map HA transport state to the next RAOP-side action.
+ * ponytail: current is last known RAOP-facing state, enough to suppress repeats. */
+ha_raop_event_t ha_state_to_raop_event(const char *state, ha_raop_event_t current);
 
 /* Map codec config (e.g. flac, mp3:320, aac:256, wav) to stream URL extension.
  * Unknown/empty codecs fall back to flac. */

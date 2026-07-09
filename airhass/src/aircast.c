@@ -34,6 +34,7 @@
 
 #define DISCOVERY_TIME 	20
 #define MEDIA_VOLUME	0.5
+#define HA_POLL		2000
 
 /*----------------------------------------------------------------------------*/
 /* globals */
@@ -162,6 +163,7 @@ static char license[] =
 /* prototypes */
 /*----------------------------------------------------------------------------*/
 static void *MRThread(void *args);
+static void *HAThread(void *args);
 static bool  AddCastDevice(struct sMR *Device, char *Name, char *UDN, bool Group, struct in_addr ip, uint16_t port);
 static bool  AddHADevice(struct sMR *Device, const ha_entity_t *Entity);
 static bool  AddHADevices(void);
@@ -177,6 +179,23 @@ static char *MakeStreamUrl(const char *codec_config, uint16_t port) {
 
 	(void)!asprintf(&uri, "http://%s:%u/stream-%u.%s", inet_ntoa(glHost), port, count++, codec);
 	return uri;
+}
+
+/*----------------------------------------------------------------------------*/
+static raopsr_event_t HARaopEvent(ha_raop_event_t event) {
+	switch (event) {
+		case HA_RAOP_PLAY: return RAOP_PLAY;
+		case HA_RAOP_PAUSE: return RAOP_PAUSE;
+		case HA_RAOP_STOP: return RAOP_STOP;
+		default: return RAOP_STREAM;
+	}
+}
+
+/*----------------------------------------------------------------------------*/
+static enum eMRstate HAPlayerState(const char *state) {
+	if (state && !strcasecmp(state, "playing")) return PLAYING;
+	if (state && !strcasecmp(state, "paused")) return PAUSED;
+	return STOPPED;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -426,6 +445,57 @@ static void *MRThread(void *args) {
 	}
 
 	list_clear((cross_list_t**)&p->GroupMaster, free);
+
+	return NULL;
+}
+
+/*----------------------------------------------------------------------------*/
+static void *HAThread(void *args) {
+	struct sMR *p = (struct sMR*) args;
+	const char *entity_id = !strncmp(p->UDN, "ha:", 3) ? p->UDN + 3 : p->UDN;
+
+	while (p->Running) {
+		ha_media_player_state_t remote = {0};
+
+		if (ha_fetch_media_player_state(glHAUrl, glHAToken, entity_id, &remote)) {
+			uint32_t now = gettime_ms();
+			enum eMRstate next_state = HAPlayerState(remote.state);
+			ha_raop_event_t action = HA_RAOP_NONE;
+
+			pthread_mutex_lock(&p->Mutex);
+			if (!p->Running) {
+				pthread_mutex_unlock(&p->Mutex);
+				break;
+			}
+
+			if (next_state != p->State) {
+				action = ha_state_to_raop_event(remote.state,
+				                               p->RaopState == RAOP_PLAY ? HA_RAOP_PLAY :
+				                               p->RaopState == RAOP_STOP ? HA_RAOP_STOP : HA_RAOP_NONE);
+				p->State = next_state;
+			}
+
+			if (action != HA_RAOP_NONE) {
+				raopsr_event_t event = HARaopEvent(action);
+				LOG_INFO("[%p]: Home Assistant %s -> %s", p, entity_id,
+				         event == RAOP_PLAY ? "play" : event == RAOP_PAUSE ? "pause" : "stop");
+				raopsr_notify(p->Raop, event, NULL);
+				p->RaopState = event;
+			}
+
+			if (remote.has_volume_level && fabs(remote.volume_level - p->Volume) >= 0.01 && now > p->VolumeStampTx + 1000) {
+				double volume = remote.volume_level;
+				p->Volume = volume;
+				p->VolumeStampRx = now;
+				LOG_INFO("[%p]: Home Assistant volume %s -> %0.4lf", p, entity_id, volume);
+				raopsr_notify(p->Raop, RAOP_VOLUME, &volume);
+			}
+
+			pthread_mutex_unlock(&p->Mutex);
+		}
+
+		crossthreads_sleep(HA_POLL);
+	}
 
 	return NULL;
 }
@@ -783,6 +853,7 @@ static bool AddHADevice(struct sMR *Device, const ha_entity_t *Entity) {
 		return false;
 	}
 
+	pthread_create(&Device->Thread, NULL, &HAThread, Device);
 	return true;
 }
 
@@ -833,7 +904,10 @@ static void RemoveCastDevice(struct sMR *Device) {
 	Device->Running = false;
 	pthread_mutex_unlock(&Device->Mutex);
 
-	if (Device->IsHA) return;
+	if (Device->IsHA) {
+		pthread_join(Device->Thread, NULL);
+		return;
+	}
 	
 	// device's thread can still be running but this will wake it up and end it
 	DeleteCastDevice(Device->CastCtx);
