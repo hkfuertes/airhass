@@ -30,6 +30,7 @@
 #include "mdnssvc.h"
 #include "config_cast.h"
 #include "ixml.h"
+#include "ha_api.h"
 
 #define DISCOVERY_TIME 	20
 #define MEDIA_VOLUME	0.5
@@ -42,6 +43,8 @@ uint16_t	glPortBase, glPortRange, glPicoPort;
 int32_t		glLogLimit = -1;
 int			glMaxDevices = 32;
 char		glBinding[16] = "?";
+char		glHAUrl[STR_LEN]   = "";
+char		glHAToken[STR_LEN] = "";
 
 log_level	main_loglevel = lINFO;
 log_level	raop_loglevel = lINFO;
@@ -957,6 +960,19 @@ int main(int argc, char *argv[]) {
 
 	if (!glConfigID) {
 		LOG_WARN("no config file, using defaults");
+	}
+
+	// validate Home Assistant config when ha_url is set (HA backend active)
+	if (*glHAUrl) {
+		if (!*glHAToken) {
+			LOG_ERROR("ha_url is set but ha_token is missing - cannot start", NULL);
+			exit(1);
+		}
+		LOG_INFO("Checking Home Assistant at %s", glHAUrl);
+		if (!ha_ping(glHAUrl, glHAToken)) {
+			LOG_ERROR("Home Assistant not reachable at %s - check ha_url and ha_token", glHAUrl);
+			exit(1);
+		}
 	}
 
 	// just do device discovery and exit

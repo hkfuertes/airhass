@@ -59,7 +59,8 @@ DEPS	= $(SRC)/aircast.h $(LIBRARY) $(LIBRARY_STATIC)
 				  
 SOURCES = castcore.c castmessage.pb.c aircast.c cast_util.c cast_parse.c config_cast.c  \
 	  cross_util.c cross_log.c cross_net.c cross_thread.c platform.c \
-	  pb_common.c pb_decode.c pb_encode.c 
+	  pb_common.c pb_decode.c pb_encode.c \
+	  ha_api.c 
 		
 SOURCES_LIBS = cross_ssl.c
 		

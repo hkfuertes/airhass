@@ -59,6 +59,9 @@ void SaveConfig(char *name, void *ref, bool full) {
 	XMLUpdateNode(doc, root, false, "max_players", "%d", (int) glMaxDevices);
 	XMLUpdateNode(doc, root, false, "ports", "%hu:%hu", glPortBase, glPortRange);
 	XMLUpdateNode(doc, root, false, "binding", glBinding);
+	/* ponytail: token in plaintext XML — acceptable for local/trusted deploys */
+	XMLUpdateNode(doc, root, false, "ha_url",   glHAUrl);
+	XMLUpdateNode(doc, root, false, "ha_token", glHAToken);
 
 	XMLUpdateNode(doc, common, false, "enabled", "%d", (int) glMRConfig.Enabled);
 	XMLUpdateNode(doc, common, false, "stop_receiver", "%d", (int) glMRConfig.StopReceiver);
@@ -145,7 +148,15 @@ static void LoadGlobalItem(char *name, char *val) {
 	if (!strcmp(name, "log_limit")) glLogLimit = atol(val);
 	if (!strcmp(name, "max_players")) glMaxDevices = atol(val);
 	if (!strcmp(name, "ports")) sscanf(val, "%hu:%hu", &glPortBase, &glPortRange);
-	if (!strcmp(name, "binding")) strcpy(glBinding, val);
+	if (!strcmp(name, "binding"))  strcpy(glBinding, val);
+	if (!strcmp(name, "ha_url"))   {
+		strncpy(glHAUrl, val, sizeof(glHAUrl) - 1);
+		glHAUrl[sizeof(glHAUrl) - 1] = '\0';
+	}
+	if (!strcmp(name, "ha_token")) {
+		strncpy(glHAToken, val, sizeof(glHAToken) - 1);
+		glHAToken[sizeof(glHAToken) - 1] = '\0';
+	}
  }
 
 

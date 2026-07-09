@@ -85,3 +85,5 @@ extern struct sMR			*glMRDevices;
 extern int					glMaxDevices;
 extern unsigned short		glPortBase, glPortRange;
 extern char					glBinding[16];
+extern char					glHAUrl[STR_LEN];
+extern char					glHAToken[STR_LEN];
