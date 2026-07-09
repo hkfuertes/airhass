@@ -44,3 +44,13 @@ int ha_parse_media_players(const char *json, ha_entity_t *out, int max);
 /* Fetch /api/states and return filtered media_player.* entities.
  * Returns count on success, -1 on fetch/parse failure. */
 int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max);
+
+/* Build the JSON body for media_player.play_media.
+ * Returns false on invalid args or buffer overflow. */
+bool ha_build_play_media_payload(const char *entity_id, const char *media_content_id,
+                                 const char *media_content_type, char *out, size_t out_len);
+
+/* POST /api/services/media_player/play_media.
+ * Returns true on HTTP 2xx, false and logs actionable errors otherwise. */
+bool ha_play_media(const char *url, const char *token, const char *entity_id,
+                   const char *media_content_id, const char *media_content_type);

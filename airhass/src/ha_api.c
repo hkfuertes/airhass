@@ -24,13 +24,16 @@
 #define HA_ENTITY_PREFIX "media_player."
 
 /*----------------------------------------------------------------------------*/
-static bool ha_http_get(const char *url, const char *token, const char *path,
-						char **body_out, int *status_out, char *line, size_t line_len) {
+static bool ha_http_request(const char *method, const char *url, const char *token, const char *path,
+                            const char *body_in, const char *content_type,
+                            char **body_out, int *status_out, char *line, size_t line_len) {
 	ha_url_t u;
-	char *resp = NULL, *body;
+	char *resp = NULL, *req = NULL, *body;
 	size_t used = 0, size = 0;
 	int fd = -1;
 	bool ok = false;
+	const char *body_data = body_in ? body_in : "";
+	size_t body_len = strlen(body_data);
 
 	if (body_out) *body_out = NULL;
 	if (status_out) *status_out = 0;
@@ -67,19 +70,30 @@ static bool ha_http_get(const char *url, const char *token, const char *path,
 	}
 	freeaddrinfo(res);
 
-	char req[1280];
-	snprintf(req, sizeof(req),
-	         "GET %s HTTP/1.0\r\n"
-	         "Host: %s:%d\r\n"
-	         "Authorization: Bearer %s\r\n"
-	         "Connection: close\r\n"
-	         "\r\n",
-	         u.path, u.host, u.port, token);
+	if (content_type && *content_type) {
+		if (asprintf(&req,
+		             "%s %s HTTP/1.0\r\n"
+		             "Host: %s:%d\r\n"
+		             "Authorization: Bearer %s\r\n"
+		             "Content-Type: %s\r\n"
+		             "Content-Length: %zu\r\n"
+		             "Connection: close\r\n"
+		             "\r\n"
+		             "%s",
+		             method, u.path, u.host, u.port, token, content_type, body_len, body_data) < 0) goto done;
+	} else {
+		if (asprintf(&req,
+		             "%s %s HTTP/1.0\r\n"
+		             "Host: %s:%d\r\n"
+		             "Authorization: Bearer %s\r\n"
+		             "Connection: close\r\n"
+		             "\r\n",
+		             method, u.path, u.host, u.port, token) < 0) goto done;
+	}
 
 	if (send(fd, req, strlen(req), 0) < 0) {
 		fprintf(stderr, "[ha] ERROR: send: %s\n", strerror(errno));
-		close(fd);
-		return false;
+		goto done;
 	}
 
 	while (1) {
@@ -90,13 +104,15 @@ static bool ha_http_get(const char *url, const char *token, const char *path,
 			goto done;
 		}
 		if (n == 0) break;
-		if (used + (size_t)n + 1 > size) {
-			size = (used + (size_t)n + 1) * 2;
-			resp = realloc(resp, size);
-			if (!resp) goto done;
+		if (used + (size_t) n + 1 > size) {
+			char *tmp;
+			size = (used + (size_t) n + 1) * 2;
+			tmp = realloc(resp, size);
+			if (!tmp) goto done;
+			resp = tmp;
 		}
-		memcpy(resp + used, buf, (size_t)n);
-		used += (size_t)n;
+		memcpy(resp + used, buf, (size_t) n);
+		used += (size_t) n;
 		resp[used] = '\0';
 	}
 
@@ -117,7 +133,7 @@ static bool ha_http_get(const char *url, const char *token, const char *path,
 
 	if (line && line_len) {
 		char *eol = strstr(resp, "\r\n");
-		size_t copy = eol ? (size_t)(eol - resp) : strlen(resp);
+		size_t copy = eol ? (size_t) (eol - resp) : strlen(resp);
 		if (copy >= line_len) copy = line_len - 1;
 		memcpy(line, resp, copy);
 		line[copy] = '\0';
@@ -132,8 +148,22 @@ static bool ha_http_get(const char *url, const char *token, const char *path,
 
 done:
 	if (fd >= 0) close(fd);
+	free(req);
 	free(resp);
 	return ok;
+}
+
+/*----------------------------------------------------------------------------*/
+static bool ha_http_get(const char *url, const char *token, const char *path,
+                        char **body_out, int *status_out, char *line, size_t line_len) {
+	return ha_http_request("GET", url, token, path, NULL, NULL, body_out, status_out, line, line_len);
+}
+
+/*----------------------------------------------------------------------------*/
+static bool ha_http_post_json(const char *url, const char *token, const char *path, const char *json,
+                              char **body_out, int *status_out, char *line, size_t line_len) {
+	return ha_http_request("POST", url, token, path, json, "application/json",
+	                       body_out, status_out, line, line_len);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -157,18 +187,18 @@ bool ha_url_parse(const char *url, ha_url_t *out) {
 
 	int host_len;
 	if (colon) {
-		host_len = (int)(colon - after_scheme);
+		host_len = (int) (colon - after_scheme);
 		out->port = atoi(colon + 1);
 		if (out->port <= 0 || out->port > 65535) {
 			fprintf(stderr, "[ha] ERROR: invalid port in URL\n");
 			return false;
 		}
 	} else {
-		host_len = slash ? (int)(slash - after_scheme) : (int)strlen(after_scheme);
+		host_len = slash ? (int) (slash - after_scheme) : (int) strlen(after_scheme);
 		out->port = HA_DEFAULT_PORT;
 	}
 
-	if (host_len <= 0 || host_len >= (int)sizeof(out->host)) {
+	if (host_len <= 0 || host_len >= (int) sizeof(out->host)) {
 		fprintf(stderr, "[ha] ERROR: host too long or empty\n");
 		return false;
 	}
@@ -233,6 +263,63 @@ int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out,
 	count = ha_parse_media_players(body, out, max);
 	free(body);
 	return count;
+}
+
+/*----------------------------------------------------------------------------*/
+bool ha_build_play_media_payload(const char *entity_id, const char *media_content_id,
+                                 const char *media_content_type, char *out, size_t out_len) {
+	json_t *root;
+	char *json;
+	bool ok;
+
+	if (!entity_id || !*entity_id || !media_content_id || !*media_content_id ||
+	    !media_content_type || !*media_content_type || !out || !out_len) return false;
+
+	root = json_pack("{ssssss}",
+	                 "entity_id", entity_id,
+	                 "media_content_id", media_content_id,
+	                 "media_content_type", media_content_type);
+	if (!root) return false;
+
+	json = json_dumps(root, JSON_COMPACT);
+	json_decref(root);
+	if (!json) return false;
+
+	ok = snprintf(out, out_len, "%s", json) < (int) out_len;
+	free(json);
+	return ok;
+}
+
+/*----------------------------------------------------------------------------*/
+bool ha_play_media(const char *url, const char *token, const char *entity_id,
+                   const char *media_content_id, const char *media_content_type) {
+	char payload[1024], line[128] = "", *body = NULL;
+	int status = 0;
+
+	if (!ha_build_play_media_payload(entity_id, media_content_id, media_content_type, payload, sizeof(payload))) {
+		fprintf(stderr, "[ha] ERROR: cannot build media_player.play_media payload for %s\n",
+		        entity_id ? entity_id : "(null)");
+		return false;
+	}
+
+	if (!ha_http_post_json(url, token, "/api/services/media_player/play_media", payload,
+	                       &body, &status, line, sizeof(line))) return false;
+	if (status == 401) {
+		fprintf(stderr, "[ha] ERROR: Home Assistant rejected the token (HTTP 401) for %s\n", url);
+		free(body);
+		return false;
+	}
+	if (status / 100 != 2) {
+		fprintf(stderr,
+		        "[ha] ERROR: media_player.play_media failed for %s: %s -- check the entity supports direct URL playback and the speaker can reach %s\n",
+		        entity_id, *line ? line : "unknown response", media_content_id);
+		if (body && *body) fprintf(stderr, "[ha] ERROR: response body: %s\n", body);
+		free(body);
+		return false;
+	}
+
+	free(body);
+	return true;
 }
 
 /*----------------------------------------------------------------------------*/

@@ -170,6 +170,17 @@ static bool	 Start(bool cold);
 static bool	 Stop(bool exit);
 
 /*----------------------------------------------------------------------------*/
+static char *MakeStreamUrl(const char *codec_config, uint16_t port) {
+	char codec[32] = "flac";
+	char *uri = NULL;
+	static int count;
+
+	(void)!sscanf(codec_config, "%31[^:]", codec);
+	(void)!asprintf(&uri, "http://%s:%u/stream-%u.%s", inet_ntoa(glHost), port, count++, codec);
+	return uri;
+}
+
+/*----------------------------------------------------------------------------*/
 static void raop_cb(void *owner, raopsr_event_t event, ...) {
 	struct sMR *Device = (struct sMR*) owner;
 	va_list args;
@@ -186,10 +197,28 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 
 	if (Device->IsHA) {
 		switch (event) {
-			case RAOP_PLAY:
 			case RAOP_STREAM:
+				LOG_INFO("[%p]: Stream", Device);
+				Device->RaopState = event;
+				break;
 			case RAOP_STOP:
 			case RAOP_FLUSH:
+				Device->RaopState = event;
+				break;
+			case RAOP_PLAY:
+				LOG_INFO("[%p]: Play", Device);
+				if (Device->RaopState != RAOP_PLAY) {
+					uint16_t port = va_arg(args, uint32_t);
+					char *uri = MakeStreamUrl(Device->Config.Codec, port);
+					const char *entity_id = !strncmp(Device->UDN, "ha:", 3) ? Device->UDN + 3 : Device->UDN;
+
+					if (uri) {
+						if (ha_play_media(glHAUrl, glHAToken, entity_id, uri, "music")) {
+							LOG_INFO("[%p]: Home Assistant play_media %s -> %s", Device, entity_id, uri);
+						}
+						free(uri);
+					}
+				}
 				Device->RaopState = event;
 				break;
 			case RAOP_VOLUME:
@@ -199,7 +228,6 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 			default:
 				break;
 		}
-		LOG_INFO("[%p]: Home Assistant target %s received RAOP event %d (streaming not wired yet)", Device, Device->Config.Name, event);
 		va_end(args);
 		pthread_mutex_unlock(&Device->Mutex);
 		return;
@@ -234,18 +262,12 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 			LOG_INFO("[%p]: Play", Device);
 			if (Device->RaopState != RAOP_PLAY) {
 				uint16_t port = va_arg(args, uint32_t);
-				char *uri, *ContentType;
-				static int count;
+				char *uri = MakeStreamUrl(Device->Config.Codec, port), *ContentType;
 
 				if (strcasestr(Device->Config.Codec, "mp3")) ContentType = "audio/mpeg";
 				else if (strcasestr(Device->Config.Codec, "aac")) ContentType = "audio/aac";
 				else if (strcasestr(Device->Config.Codec, "wav")) ContentType = "audio/wav";
 				else ContentType = "audio/flac";
-
-				// get codec extension only and format uri
-				char codec[32] = "flac";
-				(void) !sscanf(Device->Config.Codec, "%31[^:]", codec);
-				(void) !asprintf(&uri, "http://%s:%u/stream-%u.%s", inet_ntoa(glHost), port, count++, codec);
 
 				CastLoad(Device->CastCtx, uri, ContentType, Device->Name, &MetaData, 0);
 				LOG_INFO("[%p]: Cast setURI %s", Device, uri);
