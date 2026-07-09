@@ -1,2 +1,4 @@
 *.prd.md
 issues/
+bin/
+*.o

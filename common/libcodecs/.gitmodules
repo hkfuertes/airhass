@@ -1,0 +1,36 @@
+[submodule "ogg"]
+	path = ogg
+	url = https://github.com/xiph/ogg
+[submodule "alac"]
+	path = alac
+	url = https://github.com/philippe44/alac
+[submodule "shine"]
+	path = shine
+	url = https://github.com/philippe44/shine
+[submodule "soxr"]
+	path = soxr
+	url = https://github.com/philippe44/soxr
+[submodule "mad"]
+	path = mad
+	url = https://github.com/philippe44/mad
+[submodule "vorbis"]
+	path = vorbis
+	url = https://github.com/xiph/vorbis
+[submodule "opus"]
+	path = opus
+	url = https://github.com/xiph/opus
+[submodule "opusfile"]
+	path = opusfile
+	url = https://github.com/xiph/opusfile
+[submodule "faad2"]
+	path = faad2
+	url = https://github.com/philippe44/faad2
+[submodule "opusenc"]
+	path = opusenc
+	url = https://github.com/xiph/libopusenc
+[submodule "faac"]
+	path = faac
+	url = https://github.com/philippe44/faac
+[submodule "flac"]
+	path = flac
+	url = https://github.com/philippe44/flac
