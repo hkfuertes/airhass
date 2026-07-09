@@ -71,6 +71,7 @@ struct sMR {
 	double			Volume;
 	uint32_t			VolumeStampRx, VolumeStampTx;
 	bool			Group;
+	bool			IsHA;
 	struct sGroupMember {
 		struct sGroupMember	*Next;
 		struct in_addr		Host;

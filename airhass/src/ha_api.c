@@ -17,9 +17,124 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include "jansson.h"
 #include "ha_api.h"
 
 #define HA_DEFAULT_PORT 8123
+#define HA_ENTITY_PREFIX "media_player."
+
+/*----------------------------------------------------------------------------*/
+static bool ha_http_get(const char *url, const char *token, const char *path,
+						char **body_out, int *status_out, char *line, size_t line_len) {
+	ha_url_t u;
+	char *resp = NULL, *body;
+	size_t used = 0, size = 0;
+	int fd = -1;
+	bool ok = false;
+
+	if (body_out) *body_out = NULL;
+	if (status_out) *status_out = 0;
+	if (line && line_len) *line = '\0';
+	if (!ha_url_parse(url, &u)) return false;
+	if (path && *path) snprintf(u.path, sizeof(u.path), "%s", path);
+
+	char port_str[8];
+	snprintf(port_str, sizeof(port_str), "%d", u.port);
+
+	struct addrinfo hints = {0}, *res = NULL;
+	hints.ai_family   = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+
+	if (getaddrinfo(u.host, port_str, &hints, &res) != 0) {
+		fprintf(stderr, "[ha] ERROR: cannot resolve host '%s': %s\n",
+		        u.host, strerror(errno));
+		return false;
+	}
+
+	fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (fd < 0) {
+		fprintf(stderr, "[ha] ERROR: socket: %s\n", strerror(errno));
+		freeaddrinfo(res);
+		return false;
+	}
+
+	if (connect(fd, res->ai_addr, res->ai_addrlen) != 0) {
+		fprintf(stderr, "[ha] ERROR: cannot connect to %s:%d: %s\n",
+		        u.host, u.port, strerror(errno));
+		freeaddrinfo(res);
+		close(fd);
+		return false;
+	}
+	freeaddrinfo(res);
+
+	char req[1280];
+	snprintf(req, sizeof(req),
+	         "GET %s HTTP/1.0\r\n"
+	         "Host: %s:%d\r\n"
+	         "Authorization: Bearer %s\r\n"
+	         "Connection: close\r\n"
+	         "\r\n",
+	         u.path, u.host, u.port, token);
+
+	if (send(fd, req, strlen(req), 0) < 0) {
+		fprintf(stderr, "[ha] ERROR: send: %s\n", strerror(errno));
+		close(fd);
+		return false;
+	}
+
+	while (1) {
+		char buf[2048];
+		ssize_t n = recv(fd, buf, sizeof(buf), 0);
+		if (n < 0) {
+			fprintf(stderr, "[ha] ERROR: recv: %s\n", strerror(errno));
+			goto done;
+		}
+		if (n == 0) break;
+		if (used + (size_t)n + 1 > size) {
+			size = (used + (size_t)n + 1) * 2;
+			resp = realloc(resp, size);
+			if (!resp) goto done;
+		}
+		memcpy(resp + used, buf, (size_t)n);
+		used += (size_t)n;
+		resp[used] = '\0';
+	}
+
+	if (!resp) goto done;
+
+	body = strstr(resp, "\r\n\r\n");
+	if (!body) {
+		fprintf(stderr, "[ha] ERROR: malformed HTTP response\n");
+		goto done;
+	}
+	*body = '\0';
+	body += 4;
+
+	if (status_out) {
+		char *code = strchr(resp, ' ');
+		if (code) *status_out = atoi(code + 1);
+	}
+
+	if (line && line_len) {
+		char *eol = strstr(resp, "\r\n");
+		size_t copy = eol ? (size_t)(eol - resp) : strlen(resp);
+		if (copy >= line_len) copy = line_len - 1;
+		memcpy(line, resp, copy);
+		line[copy] = '\0';
+	}
+
+	if (body_out) {
+		*body_out = strdup(body);
+		if (!*body_out) goto done;
+	}
+
+	ok = true;
+
+done:
+	if (fd >= 0) close(fd);
+	free(resp);
+	return ok;
+}
 
 /*----------------------------------------------------------------------------*/
 bool ha_url_parse(const char *url, ha_url_t *out) {
@@ -67,80 +182,78 @@ bool ha_url_parse(const char *url, ha_url_t *out) {
 }
 
 /*----------------------------------------------------------------------------*/
+int ha_parse_media_players(const char *json, ha_entity_t *out, int max) {
+	json_error_t error;
+	json_t *root = json_loads(json ? json : "", 0, &error);
+	int count = 0;
+
+	if (!root || !json_is_array(root)) {
+		fprintf(stderr, "[ha] ERROR: cannot parse /api/states JSON: %s\n", error.text);
+		if (root) json_decref(root);
+		return -1;
+	}
+
+	for (size_t i = 0; i < json_array_size(root) && count < max; i++) {
+		json_t *item = json_array_get(root, i);
+		json_t *entity = json_object_get(item, "entity_id");
+		const char *entity_id = json_is_string(entity) ? json_string_value(entity) : NULL;
+		if (!entity_id || strncmp(entity_id, HA_ENTITY_PREFIX, strlen(HA_ENTITY_PREFIX))) continue;
+
+		json_t *attrs = json_object_get(item, "attributes");
+		json_t *friendly = attrs ? json_object_get(attrs, "friendly_name") : NULL;
+		const char *name = json_is_string(friendly) ? json_string_value(friendly) : entity_id;
+
+		snprintf(out[count].entity_id, sizeof(out[count].entity_id), "%s", entity_id);
+		snprintf(out[count].name, sizeof(out[count].name), "%s", name);
+		snprintf(out[count].udn, sizeof(out[count].udn), "ha:%s", entity_id);
+		count++;
+	}
+
+	json_decref(root);
+	return count;
+}
+
+/*----------------------------------------------------------------------------*/
+int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max) {
+	char *body = NULL, line[128] = "";
+	int status = 0, count;
+
+	if (!ha_http_get(url, token, "/api/states", &body, &status, line, sizeof(line))) return -1;
+	if (status == 401) {
+		fprintf(stderr, "[ha] ERROR: Home Assistant rejected the token (HTTP 401) for %s\n", url);
+		free(body);
+		return -1;
+	}
+	if (status / 100 != 2) {
+		fprintf(stderr, "[ha] ERROR: Home Assistant /api/states failed: %s\n", *line ? line : "unknown response");
+		free(body);
+		return -1;
+	}
+
+	count = ha_parse_media_players(body, out, max);
+	free(body);
+	return count;
+}
+
+/*----------------------------------------------------------------------------*/
 bool ha_ping(const char *url, const char *token) {
-	ha_url_t u;
-	if (!ha_url_parse(url, &u)) return false;
+	int status = 0;
+	char line[128] = "";
 
-	char port_str[8];
-	snprintf(port_str, sizeof(port_str), "%d", u.port);
-
-	struct addrinfo hints = {0}, *res = NULL;
-	hints.ai_family   = AF_UNSPEC;
-	hints.ai_socktype = SOCK_STREAM;
-
-	if (getaddrinfo(u.host, port_str, &hints, &res) != 0) {
-		fprintf(stderr, "[ha] ERROR: cannot resolve host '%s': %s\n",
-		        u.host, strerror(errno));
-		return false;
-	}
-
-	int fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-	if (fd < 0) {
-		fprintf(stderr, "[ha] ERROR: socket: %s\n", strerror(errno));
-		freeaddrinfo(res);
-		return false;
-	}
-
-	if (connect(fd, res->ai_addr, res->ai_addrlen) != 0) {
-		fprintf(stderr, "[ha] ERROR: cannot connect to %s:%d: %s\n",
-		        u.host, u.port, strerror(errno));
-		freeaddrinfo(res);
-		close(fd);
-		return false;
-	}
-	freeaddrinfo(res);
-
-	char req[1280];
-	snprintf(req, sizeof(req),
-	         "GET %s HTTP/1.0\r\n"
-	         "Host: %s:%d\r\n"
-	         "Authorization: Bearer %s\r\n"
-	         "Connection: close\r\n"
-	         "\r\n",
-	         u.path, u.host, u.port, token);
-
-	if (send(fd, req, strlen(req), 0) < 0) {
-		fprintf(stderr, "[ha] ERROR: send: %s\n", strerror(errno));
-		close(fd);
-		return false;
-	}
-
-	/* read only the first response line (e.g. "HTTP/1.1 200 OK\r\n") */
-	char resp[128] = {0};
-	int  total = 0, n;
-	while (total < (int)sizeof(resp) - 1) {
-		n = (int)recv(fd, resp + total, 1, 0);
-		if (n <= 0) break;
-		total++;
-		if (total >= 2 && resp[total-1] == '\n') break;
-	}
-	close(fd);
-
-	/* check status code */
-	if (strstr(resp, " 200")) {
+	if (!ha_http_get(url, token, "/api/", NULL, &status, line, sizeof(line))) return false;
+	if (status == 200) {
 		fprintf(stderr, "[ha] INFO: Home Assistant API reachable and authorised at %s\n", url);
 		return true;
 	}
-	if (strstr(resp, " 401")) {
+	if (status == 401) {
 		fprintf(stderr, "[ha] ERROR: Home Assistant rejected the token (HTTP 401) for %s\n", url);
 		return false;
 	}
-	/* any other 2xx is fine (shouldn't happen for /api/ but be lenient) */
-	if (strstr(resp, " 2")) {
-		fprintf(stderr, "[ha] INFO: Home Assistant API responded OK (%s)\n", resp);
+	if (status / 100 == 2) {
+		fprintf(stderr, "[ha] INFO: Home Assistant API responded OK (%s)\n", line);
 		return true;
 	}
 
-	fprintf(stderr, "[ha] ERROR: unexpected response from Home Assistant: %s\n", resp);
+	fprintf(stderr, "[ha] ERROR: unexpected response from Home Assistant: %s\n", *line ? line : "(empty response)");
 	return false;
 }

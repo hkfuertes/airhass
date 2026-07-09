@@ -163,6 +163,8 @@ static char license[] =
 /*----------------------------------------------------------------------------*/
 static void *MRThread(void *args);
 static bool  AddCastDevice(struct sMR *Device, char *Name, char *UDN, bool Group, struct in_addr ip, uint16_t port);
+static bool  AddHADevice(struct sMR *Device, const ha_entity_t *Entity);
+static bool  AddHADevices(void);
 static void  RemoveCastDevice(struct sMR *Device);
 static bool	 Start(bool cold);
 static bool	 Stop(bool exit);
@@ -178,6 +180,27 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 	// this is async, so player might have been deleted
 	if (!Device->Running) {
 		LOG_WARN("[%p]: device has been removed", owner);
+		pthread_mutex_unlock(&Device->Mutex);
+		return;
+	}
+
+	if (Device->IsHA) {
+		switch (event) {
+			case RAOP_PLAY:
+			case RAOP_STREAM:
+			case RAOP_STOP:
+			case RAOP_FLUSH:
+				Device->RaopState = event;
+				break;
+			case RAOP_VOLUME:
+				Device->Volume = va_arg(args, double);
+				Device->RaopState = event;
+				break;
+			default:
+				break;
+		}
+		LOG_INFO("[%p]: Home Assistant target %s received RAOP event %d (streaming not wired yet)", Device, Device->Config.Name, event);
+		va_end(args);
 		pthread_mutex_unlock(&Device->Mutex);
 		return;
 	}
@@ -397,6 +420,7 @@ static void UpdateDevices() {
 
 	for (int i = 0; i < glMaxDevices; i++) {
 		struct sMR *Device = glMRDevices + i;
+		if (Device->Running && Device->IsHA) continue;
 		if (Device->Running && Device->Remove && !CastIsConnected(Device->CastCtx)) {
 			struct in_addr addr = CastGetAddr(glMRDevices[i].CastCtx);
 			if (!ping_host(addr, 100)) {
@@ -415,7 +439,7 @@ static void UpdateDevices() {
 /*----------------------------------------------------------------------------*/
 static bool isMember(struct in_addr host) {
 	for (int i = 0; i < MAX_RENDERERS; i++) {
-		if (glMRDevices[i].Running && CastGetAddr(glMRDevices[i].CastCtx).s_addr == host.s_addr) return true;
+		if (glMRDevices[i].Running && !glMRDevices[i].IsHA && CastGetAddr(glMRDevices[i].CastCtx).s_addr == host.s_addr) return true;
 	}
 	return false;
 }
@@ -522,7 +546,7 @@ static bool mDNSsearchCallback(mdnssd_service_t *slist, void *cookie, bool *stop
 
 		// new device so search a free spot - as this function is not called
 		// recursively, no need to lock the device's mutex
-		for (Device = glMRDevices; Device->Running && Device < glMRDevices + glMaxDevices; Device++);
+		for (Device = glMRDevices; Device < glMRDevices + glMaxDevices && Device->Running; Device++);
 
 		// no more room !
 		if (Device == glMRDevices + glMaxDevices) {
@@ -643,6 +667,7 @@ static bool AddCastDevice(struct sMR *Device, char *Name, char *UDN, bool group,
 	Device->Raop 		= NULL;
 	Device->RaopState	= RAOP_STOP;
 	Device->Group 		= group;
+	Device->IsHA		= false;
 	Device->Remove		= false;
 	Device->VolumeStampRx = Device->VolumeStampTx = gettime_ms() - 2000;
 
@@ -682,6 +707,81 @@ static bool AddCastDevice(struct sMR *Device, char *Name, char *UDN, bool group,
 }
 
 /*----------------------------------------------------------------------------*/
+static bool AddHADevice(struct sMR *Device, const ha_entity_t *Entity) {
+	memcpy(&Device->Config, &glMRConfig, sizeof(tMRConfig));
+	LoadMRConfig(glConfigID, (char*) Entity->udn, &Device->Config);
+	if (!Device->Config.Enabled) return false;
+
+	strcpy(Device->UDN, Entity->udn);
+	Device->Magic		= MAGIC;
+	Device->Running		= true;
+	Device->State 		= STOPPED;
+	Device->ExpectStop 	= false;
+	Device->Volume 		= Device->Elapsed = Device->TrackPoll = 0;
+	Device->CastCtx 	= NULL;
+	Device->Raop 		= NULL;
+	Device->RaopState	= RAOP_STOP;
+	Device->Group 		= false;
+	Device->IsHA		= true;
+	Device->Remove		= false;
+	Device->GroupMaster = NULL;
+	Device->VolumeStampRx = Device->VolumeStampTx = gettime_ms() - 2000;
+	Device->Thread = (pthread_t) 0;
+
+	if (!*Device->Config.Name) snprintf(Device->Config.Name, sizeof(Device->Config.Name), "%s", Entity->name);
+	snprintf(Device->Name, sizeof(Device->Name), "%s", Entity->name);
+
+	if (!memcmp(Device->Config.mac, "\0\0\0\0\0\0", 6)) {
+		memset(Device->Config.mac, 0xcc, 2);
+		*(uint32_t*) (Device->Config.mac + 2) = hash32(Device->UDN);
+	}
+
+	LOG_INFO("[%p]: adding Home Assistant target (%s - %s)", Device, Device->Config.Name, Entity->entity_id);
+	Device->Raop = raopsr_create(glHost, glmDNSServer, Device->Config.Name,
+	                            "airhass", Device->Config.mac, Device->Config.Codec,
+	                            Device->Config.Metadata, Device->Config.Drift,
+	                            Device->Config.Flush, Device->Config.Latency,
+	                            Device, raop_cb, NULL, glPortBase, glPortRange, -1);
+	if (!Device->Raop) {
+		LOG_ERROR("[%p]: cannot create RAOP instance (%s)", Device, Device->Config.Name);
+		Device->Running = false;
+		return false;
+	}
+
+	return true;
+}
+
+/*----------------------------------------------------------------------------*/
+static bool AddHADevices(void) {
+	ha_entity_t entities[MAX_RENDERERS];
+	int count = ha_fetch_media_players(glHAUrl, glHAToken, entities, MAX_RENDERERS);
+	bool updated = false;
+
+	if (count < 0) return false;
+	LOG_INFO("Found %d Home Assistant media_player entities", count);
+
+	for (int i = 0; i < count; i++) {
+		struct sMR *Device;
+
+		if (SearchUDN(entities[i].udn)) continue;
+		for (Device = glMRDevices; Device < glMRDevices + glMaxDevices && Device->Running; Device++);
+		if (Device == glMRDevices + glMaxDevices) {
+			LOG_ERROR("Too many devices (max:%u)", glMaxDevices);
+			break;
+		}
+
+		if (AddHADevice(Device, &entities[i])) updated = true;
+	}
+
+	if ((updated && glAutoSaveConfigFile) || glDiscovery) {
+		LOG_INFO("Updating configuration %s", glConfigName);
+		SaveConfig(glConfigName, glConfigID, false);
+	}
+
+	return true;
+}
+
+/*----------------------------------------------------------------------------*/
 static void FlushCastDevices(void) {
 	for (int i = 0; i < glMaxDevices; i++) {
 		struct sMR *p = &glMRDevices[i];
@@ -697,6 +797,8 @@ static void RemoveCastDevice(struct sMR *Device) {
 	pthread_mutex_lock(&Device->Mutex);
 	Device->Running = false;
 	pthread_mutex_unlock(&Device->Mutex);
+
+	if (Device->IsHA) return;
 	
 	// device's thread can still be running but this will wake it up and end it
 	DeleteCastDevice(Device->CastCtx);
@@ -792,7 +894,7 @@ static void sighandler(int signum) {
 	if (!glGracefullShutdown) {
 		for (int i = 0; i < glMaxDevices; i++) {
 			struct sMR *p = &glMRDevices[i];
-			if (p->Running && p->State == PLAYING) CastStop(p->CastCtx);
+			if (p->Running && !p->IsHA && p->State == PLAYING) CastStop(p->CastCtx);
 		}
 		LOG_INFO("forced exit", NULL);
 		exit(0);
@@ -978,6 +1080,11 @@ int main(int argc, char *argv[]) {
 	// just do device discovery and exit
 	if (glDiscovery) {
 		Start(true);
+		if (*glHAUrl && !AddHADevices()) {
+			LOG_ERROR("Cannot create Home Assistant targets", NULL);
+			Stop(true);
+			exit(1);
+		}
 		sleep(DISCOVERY_TIME + 1);
 		Stop(true);
 		return(0);
@@ -1009,6 +1116,12 @@ int main(int argc, char *argv[]) {
 
 		exit(1);
 
+	}
+
+	if (*glHAUrl && !AddHADevices()) {
+		LOG_ERROR("Cannot create Home Assistant targets", NULL);
+		Stop(true);
+		exit(1);
 	}
 
 	for (char resp[20] = ""; strcmp(resp, "exit");) {

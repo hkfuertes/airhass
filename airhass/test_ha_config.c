@@ -1,8 +1,10 @@
 /*
  * test_ha_config.c — standalone check for ha_url_parse() and config validation.
  *
- * Build & run:
- *   cc -std=c11 -Wall test_ha_config.c src/ha_api.c -o test_ha_config && ./test_ha_config
+ * Build & run (macOS arm64 repo checkout):
+ *   cc -std=gnu11 -Wall test_ha_config.c src/ha_api.c \
+ *     -I libjansson/targets/macos/arm64/include \
+ *     libjansson/targets/macos/arm64/libjansson.a -o test_ha_config && ./test_ha_config
  *
  * Does NOT need a real Home Assistant; only tests parsing logic.
  */
