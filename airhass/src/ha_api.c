@@ -167,6 +167,30 @@ static bool ha_http_post_json(const char *url, const char *token, const char *pa
 }
 
 /*----------------------------------------------------------------------------*/
+static bool ha_call_service(const char *url, const char *token, const char *path,
+                            const char *payload, const char *entity_id) {
+	char line[128] = "", *body = NULL;
+	int status = 0;
+
+	if (!ha_http_post_json(url, token, path, payload, &body, &status, line, sizeof(line))) return false;
+	if (status == 401) {
+		fprintf(stderr, "[ha] ERROR: Home Assistant rejected the token (HTTP 401) for %s\n", url);
+		free(body);
+		return false;
+	}
+	if (status / 100 != 2) {
+		fprintf(stderr, "[ha] ERROR: %s failed for %s: %s\n",
+		        path, entity_id ? entity_id : "(null)", *line ? line : "unknown response");
+		if (body && *body) fprintf(stderr, "[ha] ERROR: response body: %s\n", body);
+		free(body);
+		return false;
+	}
+
+	free(body);
+	return true;
+}
+
+/*----------------------------------------------------------------------------*/
 bool ha_url_parse(const char *url, ha_url_t *out) {
 	if (!url || !*url) {
 		fprintf(stderr, "[ha] ERROR: empty URL\n");
@@ -307,10 +331,56 @@ bool ha_build_play_media_payload(const char *entity_id, const char *media_conten
 }
 
 /*----------------------------------------------------------------------------*/
+bool ha_build_entity_payload(const char *entity_id, char *out, size_t out_len) {
+	json_t *root;
+	char *json;
+	bool ok;
+
+	if (!entity_id || !*entity_id || !out || !out_len) return false;
+
+	root = json_pack("{ss}", "entity_id", entity_id);
+	if (!root) return false;
+
+	json = json_dumps(root, JSON_COMPACT);
+	json_decref(root);
+	if (!json) return false;
+
+	ok = snprintf(out, out_len, "%s", json) < (int) out_len;
+	free(json);
+	return ok;
+}
+
+/*----------------------------------------------------------------------------*/
+double ha_volume_level(double level) {
+	if (level < 0) return 0;
+	if (level > 1) return 1;
+	return level;
+}
+
+/*----------------------------------------------------------------------------*/
+bool ha_build_volume_payload(const char *entity_id, double volume_level, char *out, size_t out_len) {
+	json_t *root;
+	char *json;
+	bool ok;
+
+	if (!entity_id || !*entity_id || !out || !out_len) return false;
+
+	root = json_pack("{sssf}", "entity_id", entity_id, "volume_level", ha_volume_level(volume_level));
+	if (!root) return false;
+
+	json = json_dumps(root, JSON_COMPACT);
+	json_decref(root);
+	if (!json) return false;
+
+	ok = snprintf(out, out_len, "%s", json) < (int) out_len;
+	free(json);
+	return ok;
+}
+
+/*----------------------------------------------------------------------------*/
 bool ha_play_media(const char *url, const char *token, const char *entity_id,
                    const char *media_content_id, const char *media_content_type) {
-	char payload[1024], line[128] = "", *body = NULL;
-	int status = 0;
+	char payload[1024];
 
 	if (!ha_build_play_media_payload(entity_id, media_content_id, media_content_type, payload, sizeof(payload))) {
 		fprintf(stderr, "[ha] ERROR: cannot build media_player.play_media payload for %s\n",
@@ -318,24 +388,40 @@ bool ha_play_media(const char *url, const char *token, const char *entity_id,
 		return false;
 	}
 
-	if (!ha_http_post_json(url, token, "/api/services/media_player/play_media", payload,
-	                       &body, &status, line, sizeof(line))) return false;
-	if (status == 401) {
-		fprintf(stderr, "[ha] ERROR: Home Assistant rejected the token (HTTP 401) for %s\n", url);
-		free(body);
-		return false;
-	}
-	if (status / 100 != 2) {
+	if (!ha_call_service(url, token, "/api/services/media_player/play_media", payload, entity_id)) {
 		fprintf(stderr,
-		        "[ha] ERROR: media_player.play_media failed for %s: %s -- check the entity supports direct URL playback and the speaker can reach %s\n",
-		        entity_id, *line ? line : "unknown response", media_content_id);
-		if (body && *body) fprintf(stderr, "[ha] ERROR: response body: %s\n", body);
-		free(body);
+		        "[ha] ERROR: check the entity supports direct URL playback and the speaker can reach %s\n",
+		        media_content_id ? media_content_id : "(null)");
 		return false;
 	}
 
-	free(body);
 	return true;
+}
+
+/*----------------------------------------------------------------------------*/
+bool ha_stop_media(const char *url, const char *token, const char *entity_id) {
+	char payload[256];
+
+	if (!ha_build_entity_payload(entity_id, payload, sizeof(payload))) {
+		fprintf(stderr, "[ha] ERROR: cannot build media_player.media_stop payload for %s\n",
+		        entity_id ? entity_id : "(null)");
+		return false;
+	}
+
+	return ha_call_service(url, token, "/api/services/media_player/media_stop", payload, entity_id);
+}
+
+/*----------------------------------------------------------------------------*/
+bool ha_set_volume(const char *url, const char *token, const char *entity_id, double volume_level) {
+	char payload[256];
+
+	if (!ha_build_volume_payload(entity_id, volume_level, payload, sizeof(payload))) {
+		fprintf(stderr, "[ha] ERROR: cannot build media_player.volume_set payload for %s\n",
+		        entity_id ? entity_id : "(null)");
+		return false;
+	}
+
+	return ha_call_service(url, token, "/api/services/media_player/volume_set", payload, entity_id);
 }
 
 /*----------------------------------------------------------------------------*/

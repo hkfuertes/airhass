@@ -195,21 +195,30 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 	}
 
 	if (Device->IsHA) {
+		const char *entity_id = !strncmp(Device->UDN, "ha:", 3) ? Device->UDN + 3 : Device->UDN;
+
 		switch (event) {
 			case RAOP_STREAM:
 				LOG_INFO("[%p]: Stream", Device);
 				Device->RaopState = event;
 				break;
 			case RAOP_STOP:
-			case RAOP_FLUSH:
+				LOG_INFO("[%p]: Stop", Device);
+				ha_stop_media(glHAUrl, glHAToken, entity_id);
 				Device->RaopState = event;
+				break;
+			case RAOP_FLUSH:
+				if (Device->Config.Flush) {
+					LOG_INFO("[%p]: Flush", Device);
+					ha_stop_media(glHAUrl, glHAToken, entity_id);
+					Device->RaopState = event;
+				}
 				break;
 			case RAOP_PLAY:
 				LOG_INFO("[%p]: Play", Device);
 				if (Device->RaopState != RAOP_PLAY) {
 					uint16_t port = va_arg(args, uint32_t);
 					char *uri = MakeStreamUrl(Device->Config.Codec, port);
-					const char *entity_id = !strncmp(Device->UDN, "ha:", 3) ? Device->UDN + 3 : Device->UDN;
 
 					if (uri) {
 						if (ha_play_media(glHAUrl, glHAToken, entity_id, uri,
@@ -221,10 +230,18 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 				}
 				Device->RaopState = event;
 				break;
-			case RAOP_VOLUME:
-				Device->Volume = va_arg(args, double);
+			case RAOP_VOLUME: {
+				double volume = ha_volume_level(va_arg(args, double));
+
+				if (fabs(volume - Device->Volume) >= 0.01) {
+					Device->Volume = volume;
+					Device->VolumeStampTx = gettime_ms();
+					ha_set_volume(glHAUrl, glHAToken, entity_id, volume);
+					LOG_INFO("[%p]: Home Assistant volume_set %s -> %0.4lf", Device, entity_id, volume);
+				}
 				Device->RaopState = event;
 				break;
+			}
 			default:
 				break;
 		}

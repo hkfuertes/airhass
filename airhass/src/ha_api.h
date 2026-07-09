@@ -58,7 +58,25 @@ const char *ha_codec_content_type(const char *codec_config);
 bool ha_build_play_media_payload(const char *entity_id, const char *media_content_id,
                                  const char *media_content_type, char *out, size_t out_len);
 
+/* Build the JSON body for entity-targeted services like media_stop.
+ * Returns false on invalid args or buffer overflow. */
+bool ha_build_entity_payload(const char *entity_id, char *out, size_t out_len);
+
+/* Clamp a Home Assistant volume level to the valid 0..1 range.
+ * ponytail: AirPlay dB -> 0..1 conversion already happens in RAOP code. */
+double ha_volume_level(double level);
+
+/* Build the JSON body for media_player.volume_set.
+ * Returns false on invalid args or buffer overflow. */
+bool ha_build_volume_payload(const char *entity_id, double volume_level, char *out, size_t out_len);
+
 /* POST /api/services/media_player/play_media.
  * Returns true on HTTP 2xx, false and logs actionable errors otherwise. */
 bool ha_play_media(const char *url, const char *token, const char *entity_id,
                    const char *media_content_id, const char *media_content_type);
+
+/* POST /api/services/media_player/media_stop. */
+bool ha_stop_media(const char *url, const char *token, const char *entity_id);
+
+/* POST /api/services/media_player/volume_set using 0..1 scale. */
+bool ha_set_volume(const char *url, const char *token, const char *entity_id, double volume_level);
