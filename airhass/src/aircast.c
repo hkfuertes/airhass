@@ -171,11 +171,10 @@ static bool	 Stop(bool exit);
 
 /*----------------------------------------------------------------------------*/
 static char *MakeStreamUrl(const char *codec_config, uint16_t port) {
-	char codec[32] = "flac";
 	char *uri = NULL;
 	static int count;
+	const char *codec = ha_codec_extension(codec_config);
 
-	(void)!sscanf(codec_config, "%31[^:]", codec);
 	(void)!asprintf(&uri, "http://%s:%u/stream-%u.%s", inet_ntoa(glHost), port, count++, codec);
 	return uri;
 }
@@ -213,7 +212,8 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 					const char *entity_id = !strncmp(Device->UDN, "ha:", 3) ? Device->UDN + 3 : Device->UDN;
 
 					if (uri) {
-						if (ha_play_media(glHAUrl, glHAToken, entity_id, uri, "music")) {
+						if (ha_play_media(glHAUrl, glHAToken, entity_id, uri,
+					                  ha_codec_content_type(Device->Config.Codec))) {
 							LOG_INFO("[%p]: Home Assistant play_media %s -> %s", Device, entity_id, uri);
 						}
 						free(uri);
@@ -262,14 +262,10 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 			LOG_INFO("[%p]: Play", Device);
 			if (Device->RaopState != RAOP_PLAY) {
 				uint16_t port = va_arg(args, uint32_t);
-				char *uri = MakeStreamUrl(Device->Config.Codec, port), *ContentType;
+				char *uri = MakeStreamUrl(Device->Config.Codec, port);
+				const char *ContentType = ha_codec_content_type(Device->Config.Codec);
 
-				if (strcasestr(Device->Config.Codec, "mp3")) ContentType = "audio/mpeg";
-				else if (strcasestr(Device->Config.Codec, "aac")) ContentType = "audio/aac";
-				else if (strcasestr(Device->Config.Codec, "wav")) ContentType = "audio/wav";
-				else ContentType = "audio/flac";
-
-				CastLoad(Device->CastCtx, uri, ContentType, Device->Name, &MetaData, 0);
+				CastLoad(Device->CastCtx, uri, (char*) ContentType, Device->Name, &MetaData, 0);
 				LOG_INFO("[%p]: Cast setURI %s", Device, uri);
 				free(uri);
 			}

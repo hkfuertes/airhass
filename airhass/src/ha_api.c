@@ -266,6 +266,22 @@ int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out,
 }
 
 /*----------------------------------------------------------------------------*/
+const char *ha_codec_extension(const char *codec_config) {
+	if (codec_config && strcasestr(codec_config, "mp3")) return "mp3";
+	if (codec_config && strcasestr(codec_config, "aac")) return "aac";
+	if (codec_config && strcasestr(codec_config, "wav")) return "wav";
+	return "flac";
+}
+
+/*----------------------------------------------------------------------------*/
+const char *ha_codec_content_type(const char *codec_config) {
+	if (codec_config && strcasestr(codec_config, "mp3")) return "audio/mpeg";
+	if (codec_config && strcasestr(codec_config, "aac")) return "audio/aac";
+	if (codec_config && strcasestr(codec_config, "wav")) return "audio/wav";
+	return "audio/flac";
+}
+
+/*----------------------------------------------------------------------------*/
 bool ha_build_play_media_payload(const char *entity_id, const char *media_content_id,
                                  const char *media_content_type, char *out, size_t out_len) {
 	json_t *root;

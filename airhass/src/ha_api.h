@@ -45,6 +45,14 @@ int ha_parse_media_players(const char *json, ha_entity_t *out, int max);
  * Returns count on success, -1 on fetch/parse failure. */
 int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max);
 
+/* Map codec config (e.g. flac, mp3:320, aac:256, wav) to stream URL extension.
+ * Unknown/empty codecs fall back to flac. */
+const char *ha_codec_extension(const char *codec_config);
+
+/* Map codec config (e.g. flac, mp3:320, aac:256, wav) to MIME.
+ * Unknown/empty codecs fall back to audio/flac. */
+const char *ha_codec_content_type(const char *codec_config);
+
 /* Build the JSON body for media_player.play_media.
  * Returns false on invalid args or buffer overflow. */
 bool ha_build_play_media_payload(const char *entity_id, const char *media_content_id,
