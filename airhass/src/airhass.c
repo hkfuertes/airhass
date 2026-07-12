@@ -1,5 +1,5 @@
 /*
- *  AirHass: Chromecast to AirPlay
+ *  AirHass: Home Assistant to AirPlay
  *
  *  (c) Philippe, philippe_44@outlook.com
  *
@@ -50,7 +50,7 @@ char		glHAToken[STR_LEN] = "";
 log_level	main_loglevel = lINFO;
 log_level	raop_loglevel = lINFO;
 log_level	util_loglevel = lWARN;
-log_level	cast_loglevel = lINFO;
+log_level	ha_loglevel = lINFO;
 
 tMRConfig			glMRConfig = {
 							true,	// enabled
@@ -112,7 +112,7 @@ static char usage[] =
 		   "  -r                    let timing reference drift (no click)\n"
 		   "  -f <logfile>          write debug to logfile\n"
 		   "  -p <pid file>         write PID in file\n"
-		   "  -d <log>=<level>      set logging level, logs: all|raop|main|util|cast, level: error|warn|info|debug|sdebug\n"
+		   "  -d <log>=<level>      set logging level, logs: all|raop|main|util|ha, level: error|warn|info|debug|sdebug\n"
 #if LINUX || FREEBSD
 		   "  -z                    daemonize\n"
 #endif
@@ -609,7 +609,7 @@ static bool mDNSsearchCallback(mdnssd_service_t *slist, void *cookie, bool *stop
 				if (Device->Remove && ping_host(s->addr, 100)) {
 					LOG_INFO("[%p]: %s mute to mDNS search, but answers ping, so keep it", Device, Device->Config.Name);
 				}
-			// device update - when playing ChromeCast update their TXT records
+			// device update - active players can update their TXT records
 			} else {
 				char *Name = GetmDNSAttribute(s->attr, s->attr_count, "fn");
 
@@ -1097,7 +1097,7 @@ static bool ParseArgs(int argc, char **argv) {
 					if (!strcmp(v, "sdebug")) new = lSDEBUG;
 					if (!strcmp(l, "all") || !strcmp(l, "main")) main_loglevel = new;
 					if (!strcmp(l, "all") || !strcmp(l, "util")) util_loglevel = new;
-					if (!strcmp(l, "all") || !strcmp(l, "cast")) cast_loglevel = new;
+					if (!strcmp(l, "all") || !strcmp(l, "ha")) ha_loglevel = new;
 					if (!strcmp(l, "all") || !strcmp(l, "raop")) raop_loglevel = new;
 				}
 				else {
@@ -1261,9 +1261,9 @@ int main(int argc, char *argv[]) {
 			util_loglevel = debug2level(level);
 		}
 
-		if (!strcmp(resp, "castdbg"))	{
+		if (!strcmp(resp, "hadbg"))	{
 			(void)! scanf("%s", level);
-			cast_loglevel = debug2level(level);
+			ha_loglevel = debug2level(level);
 		}
 
 		if (!strcmp(resp, "raopdbg"))	{

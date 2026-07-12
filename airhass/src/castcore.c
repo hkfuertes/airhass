@@ -1,5 +1,5 @@
 /*
- * Chromecast core protocol handler
+ * Home Assistant playback protocol handler
  *
  *  (c) Philippe, philippe_44@outlook.com
  *
@@ -35,8 +35,8 @@ static SSL_CTX *glSSLctx;
 static void *CastSocketThread(void *args);
 static void *CastPingThread(void *args);
 
-extern log_level cast_loglevel;
-static log_level *loglevel = &cast_loglevel;
+extern log_level ha_loglevel;
+static log_level *loglevel = &ha_loglevel;
 
 //#define DEFAULT_RECEIVER	"CC1AD845"
 #define DEFAULT_RECEIVER	"46C1A819"

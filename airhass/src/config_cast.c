@@ -23,7 +23,7 @@
 
 extern log_level 	main_loglevel;
 extern log_level 	util_loglevel;
-extern log_level	cast_loglevel;
+extern log_level	ha_loglevel;
 
 /*----------------------------------------------------------------------------*/
 void SaveConfig(char *name, void *ref, bool full) {
@@ -53,7 +53,7 @@ void SaveConfig(char *name, void *ref, bool full) {
 	}
 
 	XMLUpdateNode(doc, root, false, "main_log", level2debug(main_loglevel));
-	XMLUpdateNode(doc, root, false, "cast_log", level2debug(cast_loglevel));
+	XMLUpdateNode(doc, root, false, "ha_log", level2debug(ha_loglevel));
 	XMLUpdateNode(doc, root, false, "util_log", level2debug(util_loglevel));
 	XMLUpdateNode(doc, root, false, "log_limit", "%d", (int32_t) glLogLimit);
 	XMLUpdateNode(doc, root, false, "max_players", "%d", (int) glMaxDevices);
@@ -143,7 +143,7 @@ static void LoadGlobalItem(char *name, char *val) {
 	if (!val) return;
 
 	if (!strcmp(name, "main_log")) main_loglevel = debug2level(val);
-	if (!strcmp(name, "cast_log")) cast_loglevel = debug2level(val);
+	if (!strcmp(name, "ha_log")) ha_loglevel = debug2level(val);
 	if (!strcmp(name, "util_log")) util_loglevel = debug2level(val);
 	if (!strcmp(name, "log_limit")) glLogLimit = atol(val);
 	if (!strcmp(name, "max_players")) glMaxDevices = atol(val);

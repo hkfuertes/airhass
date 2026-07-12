@@ -1101,7 +1101,7 @@ static bool handle_http(raopst_t *ctx, int sock) {
 	kd_add(resp, "Server", "HairTunes");
 	kd_add(resp, "Content-Type", encoder_mimetype(ctx->encoder));
 
-	// is there a range request (chromecast non-compliance to HTTP !!!)
+	// is there a range request (some clients are non-compliant to HTTP)
 	if (ctx->range && ((str = kd_lookup(headers, "Range")) != NULL)) {
 #if WIN
 		sscanf(str, "bytes=%u", &offset);
