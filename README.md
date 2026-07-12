@@ -35,9 +35,10 @@ Important:
    ```sh
    ./bin/airhass-macos -x ./config.xml
    ```
-   If AirCast is already advertising Chromecast devices, hide HA Cast targets:
+   If AirCast is already advertising Chromecast devices, list HA platform ids and hide Cast targets:
    ```sh
-   ./bin/airhass-macos -x ./config.xml --no-cast
+   ./bin/airhass-macos -x ./config.xml --list-ha-platforms
+   ./bin/airhass-macos -x ./config.xml --no-ha-platform=cast
    ```
 5. On the same LAN, open the AirPlay output picker on your phone/Mac and look for names matching your HA `media_player` entities.
 
@@ -53,6 +54,22 @@ Rules:
 ## Discovering Home Assistant targets
 
 At startup AirHass fetches `/api/states` and turns every `media_player.*` into an AirPlay target.
+
+AirHass hides Home Assistant's native AirPlay platforms by default (`apple_tv,airplay`) because they already show up in AirPlay. To hide other duplicated backends, list the platform ids from your own HA registry:
+```sh
+./bin/airhass-macos -x ./config.xml --list-ha-platforms
+```
+Example output:
+```text
+HA media_player platform ids:
+  cast (4)
+  sonos (2)
+```
+Then hide the duplicate backend:
+```sh
+./bin/airhass-macos -x ./config.xml --no-ha-platform=cast
+```
+The ids are Home Assistant `RegistryEntry.platform` values, so they depend on the integrations installed in that HA instance. Native AirPlay ids (`apple_tv,airplay`) are hidden by default and omitted from this list. Common examples: `cast`, `sonos`, `dlna_dmr`, `kodi`, `mpd`, `plex`, `yamaha_musiccast`.
 
 Useful checks:
 - AirHass log should contain `Found <n> Home Assistant media_player entities`
@@ -85,7 +102,7 @@ Expected behavior:
 - Home Assistant does **not** relay audio bytes. Reachability from the speaker to the Mac is mandatory.
 - `ha_url` is `http://` only right now.
 - Some HA integrations do not support direct URL playback or ignore stop/volume. If that happens, keep the entity but treat stop/volume as integration-specific limitations.
-- Native HA AirPlay entities are hidden automatically; add `--no-cast` to also hide HA Cast/Chromecast entities when running AirCast alongside AirHass.
+- Native HA AirPlay entities are hidden automatically (`apple_tv,airplay`); use `--list-ha-platforms` and `--no-ha-platform=<id>` to hide other duplicated backends.
 - FLAC is the default. Try `mp3:320` when playback starts failing, the target refuses the URL, or the integration/device is picky about codecs/container support.
 
 ## Human validation still required

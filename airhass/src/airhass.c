@@ -81,7 +81,8 @@ static bool					glDiscovery = false;
 static bool					glInteractive = true;
 static char*				glPidFile = NULL;
 static bool					glAutoSaveConfigFile = false;
-static bool					glHideCast = false;
+static char					glHiddenHAPlatforms[512] = "apple_tv,airplay";
+static bool					glListHAPlatforms = false;
 static bool					glGracefullShutdown = true;
 static void*				glConfigID = NULL;
 static char					glConfigName[STR_LEN] = "./config.xml";
@@ -113,7 +114,8 @@ static char usage[] =
 		   "  -k                    immediate exit on SIGQUIT and SIGTERM\n"
 		   "  -t                    license terms\n"
    		   "  --noflush             ignore flush command (wait for teardown to stop)\n"
-   		   "  --no-cast             hide HA Cast/Chromecast targets (for AirCast coexistence)\n"
+   		   "  --list-ha-platforms   list HA media_player platform ids and exit\n"
+   		   "  --no-ha-platform=x,y  hide HA entity-registry platforms by id (default: apple_tv,airplay)\n"
 		   "\n"
 		   "Build options:"
 #if LINUX
@@ -410,7 +412,7 @@ static bool AddHADevice(struct sMR *Device, const ha_entity_t *Entity) {
 /*----------------------------------------------------------------------------*/
 static bool AddHADevices(void) {
 	ha_entity_t entities[MAX_RENDERERS];
-	int count = ha_fetch_media_players(glHAUrl, glHAToken, entities, MAX_RENDERERS, glHideCast);
+	int count = ha_fetch_media_players(glHAUrl, glHAToken, entities, MAX_RENDERERS, glHiddenHAPlatforms);
 	bool updated = false;
 
 	if (count < 0) return false;
@@ -526,6 +528,15 @@ static void sighandler(int signum) {
 }
 
 /*---------------------------------------------------------------------------*/
+static bool HideHAPlatforms(const char *platforms) {
+	if (!platforms || !*platforms) return true;
+	if (*glHiddenHAPlatforms && strlen(glHiddenHAPlatforms) + 1 < sizeof(glHiddenHAPlatforms)) strcat(glHiddenHAPlatforms, ",");
+	if (strlen(glHiddenHAPlatforms) + strlen(platforms) >= sizeof(glHiddenHAPlatforms)) return false;
+	strcat(glHiddenHAPlatforms, platforms);
+	return true;
+}
+
+/*---------------------------------------------------------------------------*/
 static bool ParseArgs(int argc, char **argv) {
 	char *optarg = NULL;
 	int optind = 1;
@@ -623,7 +634,13 @@ static bool ParseArgs(int argc, char **argv) {
 			return false;
 		case '-':
 			if (!strcmp(opt + 1, "noflush")) glMRConfig.Flush = false;
-			else if (!strcmp(opt + 1, "no-cast") || !strcmp(opt + 1, "aircast-coexist")) glHideCast = true;
+			else if (!strcmp(opt + 1, "list-ha-platforms")) glListHAPlatforms = true;
+			else if (!strncmp(opt + 1, "no-ha-platform=", 15)) {
+				if (!HideHAPlatforms(opt + 16)) {
+					printf("%s", usage);
+					return false;
+				}
+			}
 			else {
 				printf("%s", usage);
 				return false;
@@ -701,6 +718,17 @@ int main(int argc, char *argv[]) {
 			LOG_ERROR("Home Assistant not reachable at %s - check ha_url and ha_token", glHAUrl);
 			exit(1);
 		}
+		if (glListHAPlatforms) {
+			if (!ha_list_media_player_platforms(glHAUrl, glHAToken)) {
+				LOG_ERROR("Cannot list Home Assistant media_player platform ids", NULL);
+				exit(1);
+			}
+			return 0;
+		}
+	}
+	else if (glListHAPlatforms) {
+		LOG_ERROR("--list-ha-platforms needs ha_url and ha_token", NULL);
+		exit(1);
 	}
 
 	// just do device discovery and exit
