@@ -300,8 +300,9 @@ static bool ha_entity_id_list_contains(char ids[][HA_ENTITY_ID_LEN], int count, 
 }
 
 /*----------------------------------------------------------------------------*/
-static int ha_fetch_airplay_entity_ids(const char *url, const char *token,
-                                       char ids[][HA_ENTITY_ID_LEN], int max) {
+static int ha_fetch_hidden_entity_ids(const char *url, const char *token,
+                                      char ids[][HA_ENTITY_ID_LEN], int max,
+                                      bool hide_cast) {
 	int fd = ha_ws_connect(url), count = 0;
 	char *auth = NULL;
 	if (fd < 0) return -1;
@@ -339,8 +340,9 @@ static int ha_fetch_airplay_entity_ids(const char *url, const char *token,
 			const char *entity_id = json_string_value(json_object_get(e, "ei"));
 			const char *platform = json_string_value(json_object_get(e, "pl"));
 			if (!entity_id || !platform || strncmp(entity_id, HA_ENTITY_PREFIX, strlen(HA_ENTITY_PREFIX))) continue;
-			/* ponytail: HA exposes native AirPlay speakers through apple_tv today; add more platform ids if HA renames it. */
-			if (strcmp(platform, "apple_tv") && strcmp(platform, "airplay")) continue;
+			/* ponytail: hide native AirPlay always; hide Cast only when sharing LAN with AirCast. */
+			if (strcmp(platform, "apple_tv") && strcmp(platform, "airplay") &&
+			    (!hide_cast || (strcmp(platform, "cast") && strcmp(platform, "google_cast") && strcmp(platform, "chromecast")))) continue;
 			snprintf(ids[count++], HA_ENTITY_ID_LEN, "%s", entity_id);
 		}
 		json_decref(root);
@@ -456,7 +458,8 @@ int ha_parse_media_players(const char *json, ha_entity_t *out, int max) {
 }
 
 /*----------------------------------------------------------------------------*/
-int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max) {
+int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max,
+                           bool hide_cast) {
 	char *body = NULL, line[128] = "";
 	int status = 0, count, hidden_count = 0;
 	char hidden[max > 0 ? max : 1][HA_ENTITY_ID_LEN];
@@ -477,7 +480,7 @@ int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out,
 	free(body);
 	if (count <= 0) return count;
 
-	hidden_count = ha_fetch_airplay_entity_ids(url, token, hidden, max);
+	hidden_count = ha_fetch_hidden_entity_ids(url, token, hidden, max, hide_cast);
 	if (hidden_count > 0) {
 		int kept = 0;
 		for (int i = 0; i < count; i++) {

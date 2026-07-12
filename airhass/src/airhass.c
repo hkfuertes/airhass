@@ -81,6 +81,7 @@ static bool					glDiscovery = false;
 static bool					glInteractive = true;
 static char*				glPidFile = NULL;
 static bool					glAutoSaveConfigFile = false;
+static bool					glHideCast = false;
 static bool					glGracefullShutdown = true;
 static void*				glConfigID = NULL;
 static char					glConfigName[STR_LEN] = "./config.xml";
@@ -112,6 +113,7 @@ static char usage[] =
 		   "  -k                    immediate exit on SIGQUIT and SIGTERM\n"
 		   "  -t                    license terms\n"
    		   "  --noflush             ignore flush command (wait for teardown to stop)\n"
+   		   "  --no-cast             hide HA Cast/Chromecast targets (for AirCast coexistence)\n"
 		   "\n"
 		   "Build options:"
 #if LINUX
@@ -408,7 +410,7 @@ static bool AddHADevice(struct sMR *Device, const ha_entity_t *Entity) {
 /*----------------------------------------------------------------------------*/
 static bool AddHADevices(void) {
 	ha_entity_t entities[MAX_RENDERERS];
-	int count = ha_fetch_media_players(glHAUrl, glHAToken, entities, MAX_RENDERERS);
+	int count = ha_fetch_media_players(glHAUrl, glHAToken, entities, MAX_RENDERERS, glHideCast);
 	bool updated = false;
 
 	if (count < 0) return false;
@@ -621,6 +623,11 @@ static bool ParseArgs(int argc, char **argv) {
 			return false;
 		case '-':
 			if (!strcmp(opt + 1, "noflush")) glMRConfig.Flush = false;
+			else if (!strcmp(opt + 1, "no-cast") || !strcmp(opt + 1, "aircast-coexist")) glHideCast = true;
+			else {
+				printf("%s", usage);
+				return false;
+			}
 			break;
 		default:
 			break;

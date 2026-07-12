@@ -35,6 +35,10 @@ Important:
    ```sh
    ./bin/airhass-macos -x ./config.xml
    ```
+   If AirCast is already advertising Chromecast devices, hide HA Cast targets:
+   ```sh
+   ./bin/airhass-macos -x ./config.xml --no-cast
+   ```
 5. On the same LAN, open the AirPlay output picker on your phone/Mac and look for names matching your HA `media_player` entities.
 
 ## Minimal config
@@ -81,6 +85,7 @@ Expected behavior:
 - Home Assistant does **not** relay audio bytes. Reachability from the speaker to the Mac is mandatory.
 - `ha_url` is `http://` only right now.
 - Some HA integrations do not support direct URL playback or ignore stop/volume. If that happens, keep the entity but treat stop/volume as integration-specific limitations.
+- Native HA AirPlay entities are hidden automatically; add `--no-cast` to also hide HA Cast/Chromecast entities when running AirCast alongside AirHass.
 - FLAC is the default. Try `mp3:320` when playback starts failing, the target refuses the URL, or the integration/device is picky about codecs/container support.
 
 ## Human validation still required

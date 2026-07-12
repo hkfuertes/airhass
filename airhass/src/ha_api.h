@@ -58,7 +58,8 @@ int ha_parse_media_players(const char *json, ha_entity_t *out, int max);
 
 /* Fetch /api/states and return filtered media_player.* entities.
  * Returns count on success, -1 on fetch/parse failure. */
-int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max);
+int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max,
+                           bool hide_cast);
 
 /* Parse Home Assistant /api/states/<entity_id> JSON into transport state + volume.
  * Returns false on invalid JSON/object shape. */
