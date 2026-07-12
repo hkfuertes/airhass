@@ -94,7 +94,7 @@ static char					glConfigName[STR_LEN] = "./config.xml";
 static struct mdnsd*		glmDNSServer = NULL;
 static pthread_mutex_t		glMainMutex;
 static uint32_t				glNetmask;
-static char*				glNameFormat = "%s+";
+static char*				glNameFormat = "%s";
 
 static char usage[] =
 			VERSION "\n"
