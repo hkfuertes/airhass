@@ -1,4 +1,5 @@
 *.prd.md
 issues/
 bin/
+config.xml
 *.o

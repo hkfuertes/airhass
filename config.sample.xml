@@ -1,4 +1,4 @@
-<aircast>
+<airhass>
   <main_log>info</main_log>
   <cast_log>info</cast_log>
   <util_log>warn</util_log>
@@ -19,4 +19,4 @@
     <flush>1</flush>
     <artwork></artwork>
   </common>
-</aircast>
+</airhass>

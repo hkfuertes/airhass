@@ -1,5 +1,5 @@
 /*
- *  AirCast: Chromecast to AirPlay
+ *  AirHass: Chromecast to AirPlay
  *
  *  (c) Philippe, philippe_44@outlook.com
  *
@@ -21,7 +21,7 @@
 #include "cross_log.h"
 #include "cross_ssl.h"
 
-#include "aircast.h"
+#include "airhass.h"
 #include "metadata.h"
 #include "cast_util.h"
 #include "cast_parse.h"
@@ -629,7 +629,7 @@ static bool mDNSsearchCallback(mdnssd_service_t *slist, void *cookie, bool *stop
 					(void)!asprintf(&autoName, glNameFormat, Device->Name);
 					if (!strcmp(autoName, Device->Config.Name)) {
 						LOG_INFO("[%p]: Device name change %s %s", Device, Name, Device->Name);
-						raopsr_update(Device->Raop, Name, "aircast");
+						raopsr_update(Device->Raop, Name, "airhass");
 						strcpy(Device->Name, Name);
 						sprintf(Device->Config.Name, glNameFormat, Name);
 						Updated = true;
@@ -671,7 +671,7 @@ static bool mDNSsearchCallback(mdnssd_service_t *slist, void *cookie, bool *stop
 		
 		if (AddCastDevice(Device, Name, UDN, Group, s->addr, s->port) && !glDiscovery) {
 			Device->Raop = raopsr_create(glHost, glmDNSServer, Device->Config.Name,
-										"aircast", Device->Config.mac, Device->Config.Codec,
+										"airhass", Device->Config.mac, Device->Config.Codec,
 										Device->Config.Metadata, Device->Config.Drift,
 										Device->Config.Flush, Device->Config.Latency,
 										Device, raop_cb, NULL, glPortBase, glPortRange, -1);

@@ -4,7 +4,7 @@ Minimal macOS runbook for Home Assistant-backed AirPlay targets.
 
 ## Credits
 
-AirHass is based on the AirConnect/AirCast codebase by Philippe (`philippe_44`): https://github.com/philippe44/AirConnect
+AirHass is based on the AirConnect/AirHass codebase by Philippe (`philippe_44`): https://github.com/philippe44/AirConnect
 This fork adds Home Assistant `media_player` discovery and AirPlay-to-Home-Assistant playback control.
 
 ## What this does

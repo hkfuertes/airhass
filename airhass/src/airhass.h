@@ -1,5 +1,5 @@
 /*
- *  AirCast: Chromecast to AirPlay
+ *  AirHass: Chromecast to AirPlay
  *
  *  (c) Philippe, philippe_44@outlook.com
  *

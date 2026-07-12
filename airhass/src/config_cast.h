@@ -1,5 +1,5 @@
 /*
- *  AirCast: config management
+ *  AirHass: config management
  *
  * (c) Philippe, philippe_44@outlook.com
  *

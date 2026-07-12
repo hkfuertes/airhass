@@ -1,5 +1,5 @@
 /*
- *  AirCast: config management
+ *  AirHass: config management
  *
  *  (c) Philippe, philippe_44@outlook.com
  *
@@ -14,7 +14,7 @@
 #include "platform.h"
 #include "cross_log.h"
 #include "ixmlextra.h"
-#include "aircast.h"
+#include "airhass.h"
 #include "config_cast.h"
 
 /*----------------------------------------------------------------------------*/
@@ -32,7 +32,7 @@ void SaveConfig(char *name, void *ref, bool full) {
 	IXML_Document *old_doc = ref;
 	IXML_Node	 *root, *common;
 	
-	IXML_Element* old_root = ixmlDocument_getElementById(old_doc, "aircast");
+	IXML_Element* old_root = ixmlDocument_getElementById(old_doc, "airhass");
 
 	if (!full && old_doc) {
 		ixmlDocument_importNode(doc, (IXML_Node*) old_root, true, &root);
@@ -48,7 +48,7 @@ void SaveConfig(char *name, void *ref, bool full) {
 		common = (IXML_Node*) ixmlDocument_getElementById((IXML_Document*) root, "common");
 	}
 	else {
-		root = XMLAddNode(doc, NULL, "aircast", NULL);
+		root = XMLAddNode(doc, NULL, "airhass", NULL);
 		common = (IXML_Node*) XMLAddNode(doc, root, "common", NULL);
 	}
 
@@ -165,7 +165,7 @@ void *FindMRConfig(void *ref, char *UDN) {
 	IXML_Node* device = NULL;
 	IXML_Document* doc = (IXML_Document*) ref;
 
-	IXML_Element* elm = ixmlDocument_getElementById(doc, "aircast");
+	IXML_Element* elm = ixmlDocument_getElementById(doc, "airhass");
 	IXML_NodeList* l1_node_list = ixmlDocument_getElementsByTagName((IXML_Document*) elm, "udn");
 	for (int i = 0; i < ixmlNodeList_length(l1_node_list); i++) {
 		IXML_Node* l1_node = ixmlNodeList_item(l1_node_list, i);
@@ -205,7 +205,7 @@ void *LoadConfig(char *name, tMRConfig *Conf) {
 	IXML_Document* doc = ixmlLoadDocument(name);
 	if (!doc) return NULL;
 
-	IXML_Element* elm = ixmlDocument_getElementById(doc, "aircast");
+	IXML_Element* elm = ixmlDocument_getElementById(doc, "airhass");
 	if (elm) {
 		IXML_NodeList* l1_node_list = ixmlNode_getChildNodes((IXML_Node*) elm);
 		for (unsigned i = 0; i < ixmlNodeList_length(l1_node_list); i++) {
