@@ -18,17 +18,20 @@ int main(void) {
 		"["
 		"{\"entity_id\":\"media_player.living_room\",\"attributes\":{\"friendly_name\":\"Living Room\"}},"
 		"{\"entity_id\":\"sensor.outdoor_temp\",\"attributes\":{\"friendly_name\":\"Outdoor Temp\"}},"
+		"{\"entity_id\":\"media_player.airplay_den\",\"attributes\":{\"friendly_name\":\"Den\"}},"
+		"{\"entity_id\":\"media_player.bedroom\",\"attributes\":{\"friendly_name\":\"Bedroom AirPlay\"}},"
+		"{\"entity_id\":\"media_player.office\",\"attributes\":{\"source_list\":[\"TV\",\"AirPlay\"]}},"
 		"{\"entity_id\":\"media_player.kitchen\",\"attributes\":{}}"
 		"]";
 	ha_entity_t entities[8];
 	int count = ha_parse_media_players(json, entities, 8);
 
-	assert(count == 2);
+	assert(count == 5);
 	assert(strcmp(entities[0].entity_id, "media_player.living_room") == 0);
 	assert(strcmp(entities[0].name, "Living Room") == 0);
 	assert(strcmp(entities[0].udn, "ha:media_player.living_room") == 0);
-	assert(strcmp(entities[1].entity_id, "media_player.kitchen") == 0);
-	assert(strcmp(entities[1].name, "media_player.kitchen") == 0);
+	assert(strcmp(entities[4].entity_id, "media_player.kitchen") == 0);
+	assert(strcmp(entities[4].name, "media_player.kitchen") == 0);
 
 	puts("PASS test_ha_entities");
 	return 0;
