@@ -16,6 +16,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdint.h>
 
 #include "jansson.h"
 #include "ha_api.h"
@@ -167,6 +168,193 @@ static bool ha_http_post_json(const char *url, const char *token, const char *pa
 }
 
 /*----------------------------------------------------------------------------*/
+static bool ha_send_all(int fd, const void *buf, size_t len) {
+	const char *p = buf;
+	while (len) {
+		ssize_t n = send(fd, p, len, 0);
+		if (n <= 0) return false;
+		p += n;
+		len -= (size_t) n;
+	}
+	return true;
+}
+
+/*----------------------------------------------------------------------------*/
+static bool ha_ws_send_text(int fd, const char *text) {
+	const unsigned char mask[4] = {0x12, 0x34, 0x56, 0x78};
+	size_t len = strlen(text);
+	unsigned char hdr[14];
+	size_t hlen = 0;
+
+	hdr[hlen++] = 0x81;
+	if (len < 126) {
+		hdr[hlen++] = 0x80 | (unsigned char) len;
+	} else if (len <= 65535) {
+		hdr[hlen++] = 0x80 | 126;
+		hdr[hlen++] = (unsigned char) (len >> 8);
+		hdr[hlen++] = (unsigned char) len;
+	} else {
+		return false;
+	}
+	memcpy(hdr + hlen, mask, sizeof(mask));
+	hlen += sizeof(mask);
+	if (!ha_send_all(fd, hdr, hlen)) return false;
+
+	char *masked = malloc(len ? len : 1);
+	if (!masked) return false;
+	for (size_t i = 0; i < len; i++) masked[i] = text[i] ^ mask[i % 4];
+	bool ok = ha_send_all(fd, masked, len);
+	free(masked);
+	return ok;
+}
+
+/*----------------------------------------------------------------------------*/
+static char *ha_ws_recv_text(int fd) {
+	unsigned char hdr[2], ext[8], mask[4];
+	uint64_t len;
+	bool masked;
+	char *out;
+
+	if (recv(fd, hdr, 2, MSG_WAITALL) != 2) return NULL;
+	if ((hdr[0] & 0x0f) == 0x8) return NULL;
+	if ((hdr[0] & 0x0f) != 0x1) return NULL;
+	masked = !!(hdr[1] & 0x80);
+	len = hdr[1] & 0x7f;
+	if (len == 126) {
+		if (recv(fd, ext, 2, MSG_WAITALL) != 2) return NULL;
+		len = ((uint64_t) ext[0] << 8) | ext[1];
+	} else if (len == 127) {
+		return NULL;
+	}
+	if (masked && recv(fd, mask, 4, MSG_WAITALL) != 4) return NULL;
+	out = malloc((size_t) len + 1);
+	if (!out) return NULL;
+	if (recv(fd, out, (size_t) len, MSG_WAITALL) != (ssize_t) len) {
+		free(out);
+		return NULL;
+	}
+	if (masked) for (uint64_t i = 0; i < len; i++) out[i] ^= mask[i % 4];
+	out[len] = '\0';
+	return out;
+}
+
+/*----------------------------------------------------------------------------*/
+static int ha_ws_connect(const char *url) {
+	ha_url_t u;
+	char *req = NULL, resp[2048];
+	size_t used = 0;
+	int fd = -1;
+
+	if (!ha_url_parse(url, &u)) return -1;
+	char port_str[8];
+	snprintf(port_str, sizeof(port_str), "%d", u.port);
+
+	struct addrinfo hints = {0}, *res = NULL;
+	hints.ai_family = AF_UNSPEC;
+	hints.ai_socktype = SOCK_STREAM;
+	if (getaddrinfo(u.host, port_str, &hints, &res) != 0) return -1;
+	fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (fd < 0 || connect(fd, res->ai_addr, res->ai_addrlen) != 0) {
+		if (fd >= 0) close(fd);
+		freeaddrinfo(res);
+		return -1;
+	}
+	freeaddrinfo(res);
+
+	if (asprintf(&req,
+	             "GET /api/websocket HTTP/1.1\r\n"
+	             "Host: %s:%d\r\n"
+	             "Upgrade: websocket\r\n"
+	             "Connection: Upgrade\r\n"
+	             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+	             "Sec-WebSocket-Version: 13\r\n\r\n",
+	             u.host, u.port) < 0) {
+		close(fd);
+		return -1;
+	}
+	if (!ha_send_all(fd, req, strlen(req))) {
+		free(req);
+		close(fd);
+		return -1;
+	}
+	free(req);
+
+	while (used + 1 < sizeof(resp)) {
+		ssize_t n = recv(fd, resp + used, 1, 0);
+		if (n <= 0) break;
+		used += (size_t) n;
+		resp[used] = '\0';
+		if (strstr(resp, "\r\n\r\n")) break;
+	}
+	if (strncmp(resp, "HTTP/1.1 101", 12) && strncmp(resp, "HTTP/1.0 101", 12)) {
+		close(fd);
+		return -1;
+	}
+	return fd;
+}
+
+/*----------------------------------------------------------------------------*/
+static bool ha_entity_id_list_contains(char ids[][HA_ENTITY_ID_LEN], int count, const char *id) {
+	for (int i = 0; i < count; i++) if (!strcmp(ids[i], id)) return true;
+	return false;
+}
+
+/*----------------------------------------------------------------------------*/
+static int ha_fetch_airplay_entity_ids(const char *url, const char *token,
+                                       char ids[][HA_ENTITY_ID_LEN], int max) {
+	int fd = ha_ws_connect(url), count = 0;
+	char *auth = NULL;
+	if (fd < 0) return -1;
+
+	if (asprintf(&auth, "{\"type\":\"auth\",\"access_token\":\"%s\"}", token) < 0) goto fail;
+	if (!ha_ws_send_text(fd, auth)) goto fail;
+	free(auth);
+	auth = NULL;
+
+	for (int i = 0; i < 4; i++) {
+		char *msg = ha_ws_recv_text(fd);
+		bool ok = msg && strstr(msg, "\"type\":\"auth_ok\"");
+		free(msg);
+		if (ok) break;
+		if (i == 3) goto fail;
+	}
+
+	if (!ha_ws_send_text(fd, "{\"id\":1,\"type\":\"config/entity_registry/list_for_display\"}")) goto fail;
+	for (int i = 0; i < 4; i++) {
+		char *msg = ha_ws_recv_text(fd);
+		json_error_t error;
+		json_t *root, *result, *entities;
+		if (!msg) goto fail;
+		root = json_loads(msg, 0, &error);
+		free(msg);
+		if (!root) continue;
+		result = json_object_get(root, "result");
+		entities = result ? json_object_get(result, "entities") : NULL;
+		if (!json_is_array(entities)) {
+			json_decref(root);
+			continue;
+		}
+		for (size_t n = 0; n < json_array_size(entities) && count < max; n++) {
+			json_t *e = json_array_get(entities, n);
+			const char *entity_id = json_string_value(json_object_get(e, "ei"));
+			const char *platform = json_string_value(json_object_get(e, "pl"));
+			if (!entity_id || !platform || strncmp(entity_id, HA_ENTITY_PREFIX, strlen(HA_ENTITY_PREFIX))) continue;
+			/* ponytail: HA exposes native AirPlay speakers through apple_tv today; add more platform ids if HA renames it. */
+			if (strcmp(platform, "apple_tv") && strcmp(platform, "airplay")) continue;
+			snprintf(ids[count++], HA_ENTITY_ID_LEN, "%s", entity_id);
+		}
+		json_decref(root);
+		close(fd);
+		return count;
+	}
+
+fail:
+	free(auth);
+	close(fd);
+	return -1;
+}
+
+/*----------------------------------------------------------------------------*/
 static bool ha_call_service(const char *url, const char *token, const char *path,
                             const char *payload, const char *entity_id) {
 	char line[128] = "", *body = NULL;
@@ -270,7 +458,8 @@ int ha_parse_media_players(const char *json, ha_entity_t *out, int max) {
 /*----------------------------------------------------------------------------*/
 int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max) {
 	char *body = NULL, line[128] = "";
-	int status = 0, count;
+	int status = 0, count, hidden_count = 0;
+	char hidden[max > 0 ? max : 1][HA_ENTITY_ID_LEN];
 
 	if (!ha_http_get(url, token, "/api/states", &body, &status, line, sizeof(line))) return -1;
 	if (status == 401) {
@@ -286,6 +475,18 @@ int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out,
 
 	count = ha_parse_media_players(body, out, max);
 	free(body);
+	if (count <= 0) return count;
+
+	hidden_count = ha_fetch_airplay_entity_ids(url, token, hidden, max);
+	if (hidden_count > 0) {
+		int kept = 0;
+		for (int i = 0; i < count; i++) {
+			if (ha_entity_id_list_contains(hidden, hidden_count, out[i].entity_id)) continue;
+			if (kept != i) out[kept] = out[i];
+			kept++;
+		}
+		count = kept;
+	}
 	return count;
 }
 
