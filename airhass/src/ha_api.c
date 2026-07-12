@@ -300,9 +300,27 @@ static bool ha_entity_id_list_contains(char ids[][HA_ENTITY_ID_LEN], int count, 
 }
 
 /*----------------------------------------------------------------------------*/
+static bool ha_platform_in_csv(const char *csv, const char *platform) {
+	char token[64];
+	const char *p = csv;
+	if (!csv || !platform || !*platform) return false;
+	while (*p) {
+		size_t n = strcspn(p, ",");
+		if (n < sizeof(token)) {
+			memcpy(token, p, n);
+			token[n] = '\0';
+			if (!strcmp(token, platform)) return true;
+		}
+		p += n;
+		if (*p == ',') p++;
+	}
+	return false;
+}
+
+/*----------------------------------------------------------------------------*/
 static int ha_fetch_hidden_entity_ids(const char *url, const char *token,
                                       char ids[][HA_ENTITY_ID_LEN], int max,
-                                      bool hide_cast) {
+                                      const char *hidden_platforms) {
 	int fd = ha_ws_connect(url), count = 0;
 	char *auth = NULL;
 	if (fd < 0) return -1;
@@ -340,9 +358,7 @@ static int ha_fetch_hidden_entity_ids(const char *url, const char *token,
 			const char *entity_id = json_string_value(json_object_get(e, "ei"));
 			const char *platform = json_string_value(json_object_get(e, "pl"));
 			if (!entity_id || !platform || strncmp(entity_id, HA_ENTITY_PREFIX, strlen(HA_ENTITY_PREFIX))) continue;
-			/* ponytail: hide native AirPlay always; hide Cast only when sharing LAN with AirCast. */
-			if (strcmp(platform, "apple_tv") && strcmp(platform, "airplay") &&
-			    (!hide_cast || (strcmp(platform, "cast") && strcmp(platform, "google_cast") && strcmp(platform, "chromecast")))) continue;
+			if (!ha_platform_in_csv(hidden_platforms, platform)) continue;
 			snprintf(ids[count++], HA_ENTITY_ID_LEN, "%s", entity_id);
 		}
 		json_decref(root);
@@ -354,6 +370,67 @@ fail:
 	free(auth);
 	close(fd);
 	return -1;
+}
+
+/*----------------------------------------------------------------------------*/
+bool ha_list_media_player_platforms(const char *url, const char *token) {
+	int fd = ha_ws_connect(url), platform_count = 0;
+	char platforms[64][64];
+	int counts[64] = {0};
+	char *auth = NULL;
+	if (fd < 0) return false;
+
+	if (asprintf(&auth, "{\"type\":\"auth\",\"access_token\":\"%s\"}", token) < 0) goto fail;
+	if (!ha_ws_send_text(fd, auth)) goto fail;
+	free(auth);
+	auth = NULL;
+
+	for (int i = 0; i < 4; i++) {
+		char *msg = ha_ws_recv_text(fd);
+		bool ok = msg && strstr(msg, "\"type\":\"auth_ok\"");
+		free(msg);
+		if (ok) break;
+		if (i == 3) goto fail;
+	}
+
+	if (!ha_ws_send_text(fd, "{\"id\":1,\"type\":\"config/entity_registry/list_for_display\"}")) goto fail;
+	for (int i = 0; i < 4; i++) {
+		char *msg = ha_ws_recv_text(fd);
+		json_error_t error;
+		json_t *root, *result, *entities;
+		if (!msg) goto fail;
+		root = json_loads(msg, 0, &error);
+		free(msg);
+		if (!root) continue;
+		result = json_object_get(root, "result");
+		entities = result ? json_object_get(result, "entities") : NULL;
+		if (!json_is_array(entities)) {
+			json_decref(root);
+			continue;
+		}
+		for (size_t n = 0; n < json_array_size(entities); n++) {
+			json_t *e = json_array_get(entities, n);
+			const char *entity_id = json_string_value(json_object_get(e, "ei"));
+			const char *platform = json_string_value(json_object_get(e, "pl"));
+			if (!entity_id || !platform || strncmp(entity_id, HA_ENTITY_PREFIX, strlen(HA_ENTITY_PREFIX))) continue;
+			if (!strcmp(platform, "apple_tv") || !strcmp(platform, "airplay")) continue;
+			int p;
+			for (p = 0; p < platform_count; p++) if (!strcmp(platforms[p], platform)) break;
+			if (p == platform_count && platform_count < (int)(sizeof(platforms) / sizeof(platforms[0])))
+				snprintf(platforms[platform_count++], sizeof(platforms[0]), "%s", platform);
+			if (p < (int)(sizeof(counts) / sizeof(counts[0]))) counts[p]++;
+		}
+		puts("HA media_player platform ids:");
+		for (int p = 0; p < platform_count; p++) printf("  %s (%d)\n", platforms[p], counts[p]);
+		json_decref(root);
+		close(fd);
+		return true;
+	}
+
+fail:
+	free(auth);
+	close(fd);
+	return false;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -459,7 +536,7 @@ int ha_parse_media_players(const char *json, ha_entity_t *out, int max) {
 
 /*----------------------------------------------------------------------------*/
 int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out, int max,
-                           bool hide_cast) {
+                           const char *hidden_platforms) {
 	char *body = NULL, line[128] = "";
 	int status = 0, count, hidden_count = 0;
 	char hidden[max > 0 ? max : 1][HA_ENTITY_ID_LEN];
@@ -480,7 +557,7 @@ int ha_fetch_media_players(const char *url, const char *token, ha_entity_t *out,
 	free(body);
 	if (count <= 0) return count;
 
-	hidden_count = ha_fetch_hidden_entity_ids(url, token, hidden, max, hide_cast);
+	hidden_count = ha_fetch_hidden_entity_ids(url, token, hidden, max, hidden_platforms);
 	if (hidden_count > 0) {
 		int kept = 0;
 		for (int i = 0; i < count; i++) {
