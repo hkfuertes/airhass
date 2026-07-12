@@ -16,7 +16,6 @@
 #include "platform.h"
 #include "pthread.h"
 #include "raop_server.h"
-#include "cast_util.h"
 
 #define VERSION "v1.10.1"" ("__DATE__" @ "__TIME__")"
 
@@ -41,7 +40,6 @@ enum 	eMRstate { STOPPED, PLAYING, PAUSED };
 typedef struct sMRConfig
 {
 	bool		Enabled;
-	bool		StopReceiver;
 	char		Name[STR_LEN];
 	char		Codec[STR_LEN];
 	bool		Metadata;
@@ -62,22 +60,10 @@ struct sMR {
 	char UDN	   	[RESOURCE_LENGTH];
 	char Name		[STR_LEN];
 	enum eMRstate 	State;
-	bool			ExpectStop;
-	uint32_t			Elapsed;
-	unsigned		TrackPoll;
-	void			*CastCtx;
 	pthread_mutex_t Mutex;
 	pthread_t 		Thread;
 	double			Volume;
 	uint32_t			VolumeStampRx, VolumeStampTx;
-	bool			Group;
-	bool			IsHA;
-	struct sGroupMember {
-		struct sGroupMember	*Next;
-		struct in_addr		Host;
-		uint16_t				Port;
-   } *GroupMaster;
-   bool Remove;
 };
 
 extern int32_t				glLogLimit;

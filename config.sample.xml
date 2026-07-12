@@ -10,7 +10,6 @@
   <ha_token>PASTE_LONG_LIVED_ACCESS_TOKEN_HERE</ha_token>
   <common>
     <enabled>1</enabled>
-    <stop_receiver>0</stop_receiver>
     <media_volume>0.5000</media_volume>
     <latency></latency>
     <drift>0</drift>

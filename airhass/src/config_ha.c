@@ -15,7 +15,7 @@
 #include "cross_log.h"
 #include "ixmlextra.h"
 #include "airhass.h"
-#include "config_cast.h"
+#include "config_ha.h"
 
 /*----------------------------------------------------------------------------*/
 /* locals */
@@ -64,7 +64,6 @@ void SaveConfig(char *name, void *ref, bool full) {
 	XMLUpdateNode(doc, root, false, "ha_token", glHAToken);
 
 	XMLUpdateNode(doc, common, false, "enabled", "%d", (int) glMRConfig.Enabled);
-	XMLUpdateNode(doc, common, false, "stop_receiver", "%d", (int) glMRConfig.StopReceiver);
 	XMLUpdateNode(doc, common, false, "media_volume", "%0.4lf", glMRConfig.MediaVolume);
 	XMLUpdateNode(doc, common, false, "latency", glMRConfig.Latency);
 	XMLUpdateNode(doc, common, false, "drift", "%d", glMRConfig.Drift);
@@ -121,7 +120,6 @@ static void LoadConfigItem(tMRConfig *Conf, char *name, char *val) {
 	if (!val) return;
 
 	if (!strcmp(name, "enabled")) Conf->Enabled = atol(val);
-	if (!strcmp(name, "stop_receiver")) Conf->StopReceiver = atol(val);
 	if (!strcmp(name, "media_volume")) Conf->MediaVolume = atof(val);
 	if (!strcmp(name, "codec")) strcpy(Conf->Codec, val);
 	if (!strcmp(name, "metadata")) Conf->Metadata = atoi(val);

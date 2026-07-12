@@ -34,7 +34,6 @@ RAOP		= $(COMMON)/libraop/targets
 PUPNP 		= $(COMMON)/libpupnp/targets/$(HOST)/$(PLATFORM)
 CODECS		= $(COMMON)/libcodecs/targets
 OPENSSL		= $(COMMON)/libopenssl/targets/$(HOST)/$(PLATFORM)
-NANOPB		= nanopb
 JANSSON		= libjansson/targets/$(HOST)/$(PLATFORM)
 
 DEFINES 	+= -D_FILE_OFFSET_BITS=64 -DPB_FIELD_16BIT -DNDEBUG -D_GNU_SOURCE -DUPNP_STATIC_LIB
@@ -51,17 +50,15 @@ INCLUDE = -I$(OPENSSL)/include \
 		  -I$(PUPNP)/include/upnp -I$(PUPNP)/include/ixml -I$(PUPNP)/include/addons \
 		  -I$(CODECS)/include/flac -I$(CODECS)/include/shine \
 		  -I$(MDNS)/include/mdnssvc -I$(MDNS)/include/mdnssd \
-		  -I$(NANOPB) \
 		  -I$(JANSSON)/include
 		  		  
 DEPS	= $(SRC)/airhass.h $(LIBRARY) $(LIBRARY_STATIC)
 				  
-SOURCES = castcore.c castmessage.pb.c airhass.c cast_util.c cast_parse.c config_cast.c  \
+SOURCES = airhass.c config_ha.c  \
 	  cross_util.c cross_log.c cross_net.c cross_thread.c platform.c \
-	  pb_common.c pb_decode.c pb_encode.c \
 	  ha_api.c 
 		
-SOURCES_LIBS = cross_ssl.c
+SOURCES_LIBS =
 		
 OBJECTS 		= $(patsubst %.c,$(BUILDDIR)/%.o,$(SOURCES) $(SOURCES_LIBS)) 
 OBJECTS_STATIC 	= $(patsubst %.c,$(BUILDDIR)/%.o,$(SOURCES)) $(patsubst %.c,$(BUILDDIR)/%-static.o,$(SOURCES_LIBS)) 
@@ -70,9 +67,10 @@ LIBRARY		= $(RAOP)/$(HOST)/$(PLATFORM)/libraop.a \
 			  $(PUPNP)/libpupnp.a \
 			  $(CODECS)/$(HOST)/$(PLATFORM)/libcodecs.a \
 			  $(MDNS)/$(HOST)/$(PLATFORM)/libmdns.a \
-			  $(JANSSON)/libjansson.a
+			  $(JANSSON)/libjansson.a \
+			  $(OPENSSL)/libopenssl.a
 				  
-LIBRARY_STATIC 	= $(LIBRARY) $(OPENSSL)/libopenssl.a
+LIBRARY_STATIC 	= $(LIBRARY)
 
 all: directory $(EXECUTABLE) $(EXECUTABLE_STATIC)
 
