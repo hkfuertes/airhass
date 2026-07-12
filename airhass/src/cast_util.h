@@ -1,5 +1,5 @@
 /*
- *  Chromecast control utils
+ *  Home Assistant playback control utils
  *
  *  (c) Philippe, philippe_44@outlook.com
  *

@@ -1,5 +1,5 @@
 /*
- *  AirCast: config management
+ *  AirHass: config management
  *
  *  (c) Philippe, philippe_44@outlook.com
  *
@@ -14,7 +14,7 @@
 #include "platform.h"
 #include "cross_log.h"
 #include "ixmlextra.h"
-#include "aircast.h"
+#include "airhass.h"
 #include "config_cast.h"
 
 /*----------------------------------------------------------------------------*/
@@ -23,7 +23,7 @@
 
 extern log_level 	main_loglevel;
 extern log_level 	util_loglevel;
-extern log_level	cast_loglevel;
+extern log_level	ha_loglevel;
 
 /*----------------------------------------------------------------------------*/
 void SaveConfig(char *name, void *ref, bool full) {
@@ -32,7 +32,7 @@ void SaveConfig(char *name, void *ref, bool full) {
 	IXML_Document *old_doc = ref;
 	IXML_Node	 *root, *common;
 	
-	IXML_Element* old_root = ixmlDocument_getElementById(old_doc, "aircast");
+	IXML_Element* old_root = ixmlDocument_getElementById(old_doc, "airhass");
 
 	if (!full && old_doc) {
 		ixmlDocument_importNode(doc, (IXML_Node*) old_root, true, &root);
@@ -48,12 +48,12 @@ void SaveConfig(char *name, void *ref, bool full) {
 		common = (IXML_Node*) ixmlDocument_getElementById((IXML_Document*) root, "common");
 	}
 	else {
-		root = XMLAddNode(doc, NULL, "aircast", NULL);
+		root = XMLAddNode(doc, NULL, "airhass", NULL);
 		common = (IXML_Node*) XMLAddNode(doc, root, "common", NULL);
 	}
 
 	XMLUpdateNode(doc, root, false, "main_log", level2debug(main_loglevel));
-	XMLUpdateNode(doc, root, false, "cast_log", level2debug(cast_loglevel));
+	XMLUpdateNode(doc, root, false, "ha_log", level2debug(ha_loglevel));
 	XMLUpdateNode(doc, root, false, "util_log", level2debug(util_loglevel));
 	XMLUpdateNode(doc, root, false, "log_limit", "%d", (int32_t) glLogLimit);
 	XMLUpdateNode(doc, root, false, "max_players", "%d", (int) glMaxDevices);
@@ -143,7 +143,7 @@ static void LoadGlobalItem(char *name, char *val) {
 	if (!val) return;
 
 	if (!strcmp(name, "main_log")) main_loglevel = debug2level(val);
-	if (!strcmp(name, "cast_log")) cast_loglevel = debug2level(val);
+	if (!strcmp(name, "ha_log")) ha_loglevel = debug2level(val);
 	if (!strcmp(name, "util_log")) util_loglevel = debug2level(val);
 	if (!strcmp(name, "log_limit")) glLogLimit = atol(val);
 	if (!strcmp(name, "max_players")) glMaxDevices = atol(val);
@@ -165,7 +165,7 @@ void *FindMRConfig(void *ref, char *UDN) {
 	IXML_Node* device = NULL;
 	IXML_Document* doc = (IXML_Document*) ref;
 
-	IXML_Element* elm = ixmlDocument_getElementById(doc, "aircast");
+	IXML_Element* elm = ixmlDocument_getElementById(doc, "airhass");
 	IXML_NodeList* l1_node_list = ixmlDocument_getElementsByTagName((IXML_Document*) elm, "udn");
 	for (int i = 0; i < ixmlNodeList_length(l1_node_list); i++) {
 		IXML_Node* l1_node = ixmlNodeList_item(l1_node_list, i);
@@ -205,7 +205,7 @@ void *LoadConfig(char *name, tMRConfig *Conf) {
 	IXML_Document* doc = ixmlLoadDocument(name);
 	if (!doc) return NULL;
 
-	IXML_Element* elm = ixmlDocument_getElementById(doc, "aircast");
+	IXML_Element* elm = ixmlDocument_getElementById(doc, "airhass");
 	if (elm) {
 		IXML_NodeList* l1_node_list = ixmlNode_getChildNodes((IXML_Node*) elm);
 		for (unsigned i = 0; i < ixmlNodeList_length(l1_node_list); i++) {

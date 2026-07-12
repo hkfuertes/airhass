@@ -1,5 +1,5 @@
 /*
- *  Chromecast parse utils
+ *  Home Assistant playback parse utils
  *
  *  (c) Philippe, philippe_44@outlook.com
  *
@@ -15,8 +15,8 @@
 #include "jansson.h"
 #include "cast_parse.h"
 
-extern log_level cast_loglevel;
-//static log_level *loglevel = &cast_loglevel;
+extern log_level ha_loglevel;
+//static log_level *loglevel = &ha_loglevel;
 
 /*----------------------------------------------------------------------------*/
 /* 																			  */

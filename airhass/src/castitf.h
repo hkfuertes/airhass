@@ -1,5 +1,5 @@
 /*
- * Chromecast internal interface
+ * Home Assistant playback internal interface
  * 
  * (c) Philippe 2016-2017, philippe_44@outlook.com
  * 

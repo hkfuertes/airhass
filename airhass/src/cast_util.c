@@ -1,5 +1,5 @@
 /*
- *  Chromecast misc utils
+ *  Home Assistant playback misc utils
  *
  *  (c) Philippe, philippe_44@outlook.com
  *
@@ -16,8 +16,8 @@
 #include "cast_util.h"
 #include "castitf.h"
 
-extern log_level cast_loglevel;
-static log_level *loglevel = &cast_loglevel;
+extern log_level ha_loglevel;
+static log_level *loglevel = &ha_loglevel;
 
 /*----------------------------------------------------------------------------*/
 static json_t* BuildMetaData(struct metadata_s* MetaData) {

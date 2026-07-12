@@ -21,7 +21,6 @@ endif
 endif
 
 BASE              = ..
-# ponytail: only rename visible to user (aircast -> airhass); source filenames unchanged
 CORE              = $(BASE)/bin/airhass-$(HOST)
 BUILDDIR          = $(dir $(CORE))$(HOST)/$(PLATFORM)
 EXECUTABLE        = $(CORE)-$(PLATFORM)
@@ -55,9 +54,9 @@ INCLUDE = -I$(OPENSSL)/include \
 		  -I$(NANOPB) \
 		  -I$(JANSSON)/include
 		  		  
-DEPS	= $(SRC)/aircast.h $(LIBRARY) $(LIBRARY_STATIC)
+DEPS	= $(SRC)/airhass.h $(LIBRARY) $(LIBRARY_STATIC)
 				  
-SOURCES = castcore.c castmessage.pb.c aircast.c cast_util.c cast_parse.c config_cast.c  \
+SOURCES = castcore.c castmessage.pb.c airhass.c cast_util.c cast_parse.c config_cast.c  \
 	  cross_util.c cross_log.c cross_net.c cross_thread.c platform.c \
 	  pb_common.c pb_decode.c pb_encode.c \
 	  ha_api.c 
