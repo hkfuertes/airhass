@@ -159,8 +159,9 @@ static char license[] =
 /* prototypes */
 /*----------------------------------------------------------------------------*/
 static void *HAThread(void *args);
-static bool  AddHADevice(struct sMR *Device, const ha_entity_t *Entity);
+static bool  AddHADevice(struct sMR *Device, const ha_entity_t *Entity, bool force_name);
 static bool  AddHADevices(void);
+static bool  RefreshHADevices(void);
 static bool	 Start(bool cold);
 static bool	 Stop(bool exit);
 
@@ -354,6 +355,8 @@ static void *MainThread(void *args) {
 			}
 		}
 
+		if (*glHAUrl) RefreshHADevices();
+
 	}
 
 	return NULL;
@@ -370,7 +373,29 @@ static struct sMR *SearchUDN(const char *UDN) {
 }
 
 /*----------------------------------------------------------------------------*/
-static bool AddHADevice(struct sMR *Device, const ha_entity_t *Entity) {
+static bool HAEntityListContainsUDN(ha_entity_t *entities, int count, const char *udn) {
+	for (int i = 0; i < count; i++) {
+		if (!strcmp(entities[i].udn, udn)) return true;
+	}
+	return false;
+}
+
+/*----------------------------------------------------------------------------*/
+static void RemoveHADevice(struct sMR *Device) {
+	LOG_INFO("[%p]: removing Home Assistant target (%s)", Device, Device->UDN);
+
+	pthread_mutex_lock(&Device->Mutex);
+	Device->Running = false;
+	pthread_mutex_unlock(&Device->Mutex);
+
+	raopsr_delete(Device->Raop);
+	if (Device->Thread) pthread_join(Device->Thread, NULL);
+	Device->Raop = NULL;
+	Device->Thread = (pthread_t) 0;
+}
+
+/*----------------------------------------------------------------------------*/
+static bool AddHADevice(struct sMR *Device, const ha_entity_t *Entity, bool force_name) {
 	memcpy(&Device->Config, &glMRConfig, sizeof(tMRConfig));
 	LoadMRConfig(glConfigID, (char*) Entity->udn, &Device->Config);
 	if (!Device->Config.Enabled) return false;
@@ -385,7 +410,7 @@ static bool AddHADevice(struct sMR *Device, const ha_entity_t *Entity) {
 	Device->VolumeStampRx = Device->VolumeStampTx = gettime_ms() - 2000;
 	Device->Thread = (pthread_t) 0;
 
-	if (!*Device->Config.Name) snprintf(Device->Config.Name, sizeof(Device->Config.Name), "%s", Entity->name);
+	if (force_name || !*Device->Config.Name) snprintf(Device->Config.Name, sizeof(Device->Config.Name), "%s", Entity->name);
 	snprintf(Device->Name, sizeof(Device->Name), "%s", Entity->name);
 
 	if (!memcmp(Device->Config.mac, "\0\0\0\0\0\0", 6)) {
@@ -428,10 +453,60 @@ static bool AddHADevices(void) {
 			break;
 		}
 
-		if (AddHADevice(Device, &entities[i])) updated = true;
+		if (AddHADevice(Device, &entities[i], false)) updated = true;
 	}
 
 	if ((updated && glAutoSaveConfigFile) || glDiscovery) {
+		LOG_INFO("Updating configuration %s", glConfigName);
+		SaveConfig(glConfigName, glConfigID, false);
+	}
+
+	return true;
+}
+
+/*----------------------------------------------------------------------------*/
+static bool RefreshHADevices(void) {
+	ha_entity_t entities[MAX_RENDERERS];
+	int count = ha_fetch_media_players(glHAUrl, glHAToken, entities, MAX_RENDERERS, glHiddenHAPlatforms);
+	bool updated = false;
+
+	if (count < 0) return false;
+	LOG_DEBUG("Refreshing Home Assistant media_player entities: %d found", count);
+
+	for (int i = 0; i < glMaxDevices; i++) {
+		struct sMR *Device = glMRDevices + i;
+		if (!Device->Running || strncmp(Device->UDN, "ha:", 3)) continue;
+		if (!HAEntityListContainsUDN(entities, count, Device->UDN)) {
+			RemoveHADevice(Device);
+			updated = true;
+		}
+	}
+
+	for (int i = 0; i < count; i++) {
+		struct sMR *Device = SearchUDN(entities[i].udn);
+		if (Device) {
+			if (strcmp(Device->Name, entities[i].name)) {
+				bool auto_name = !strcmp(Device->Config.Name, Device->Name);
+				LOG_INFO("[%p]: Home Assistant target renamed (%s -> %s)", Device, Device->Name, entities[i].name);
+				if (auto_name) {
+					RemoveHADevice(Device);
+					if (AddHADevice(Device, &entities[i], true)) updated = true;
+				} else {
+					snprintf(Device->Name, sizeof(Device->Name), "%s", entities[i].name);
+				}
+			}
+			continue;
+		}
+
+		for (Device = glMRDevices; Device < glMRDevices + glMaxDevices && Device->Running; Device++);
+		if (Device == glMRDevices + glMaxDevices) {
+			LOG_ERROR("Too many devices (max:%u)", glMaxDevices);
+			break;
+		}
+		if (AddHADevice(Device, &entities[i], false)) updated = true;
+	}
+
+	if (updated && glAutoSaveConfigFile) {
 		LOG_INFO("Updating configuration %s", glConfigName);
 		SaveConfig(glConfigName, glConfigID, false);
 	}
