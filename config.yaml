@@ -1,5 +1,5 @@
 name: AirHass
-version: "1.11.1"
+version: "1.12.0"
 slug: airhass
 description: Expose Home Assistant media players as AirPlay targets.
 arch:

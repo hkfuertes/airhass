@@ -289,7 +289,9 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 			strcpy(Device->NowPlaying, key);
 
 			if (meta->artwork) (void)!asprintf(&artwork_url, "http://%s:%u%s", inet_ntoa(glHost), glPicoPort, meta->artwork);
-			if (ha_set_now_playing(glHAUrl, glHAToken, entity_id, meta->artist, meta->album, meta->title, artwork_url, Device->Name)) {
+			const char *ha_state = Device->RaopState == RAOP_PLAY ? "playing" :
+			                       Device->RaopState == RAOP_PAUSE ? "paused" : "idle";
+			if (ha_set_now_playing(glHAUrl, glHAToken, entity_id, ha_state, meta->artist, meta->album, meta->title, artwork_url)) {
 				LOG_INFO("[%p]: Home Assistant now_playing %s -> %s - %s", Device, entity_id,
 				         meta->artist ? meta->artist : "?", meta->title ? meta->title : "?");
 			}
