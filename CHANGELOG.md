@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.13.1
+
+- Fix pause/resume on players that flap `playing`/`idle` (e.g. Echo/Alexa): `idle` now maps to AirPlay **pause** (session stays alive) and stopped-class changes need ~10s sustained before acting. STOP is only sent for `off`/`unavailable`.
+
 ## 1.13.0
 
 - Remove now-playing reporting (sensor and media_player attribute injection). Playback, stop and volume only. Leftover `sensor.airhass_*` entities disappear on HA restart.

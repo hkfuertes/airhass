@@ -14,7 +14,8 @@ int main(void) {
 	assert(ha_state_to_raop_event("paused", HA_RAOP_PLAY) == HA_RAOP_PAUSE);
 	assert(ha_state_to_raop_event("paused", HA_RAOP_NONE) == HA_RAOP_NONE);
 
-	assert(ha_state_to_raop_event("idle", HA_RAOP_PLAY) == HA_RAOP_STOP);
+	assert(ha_state_to_raop_event("idle", HA_RAOP_PLAY) == HA_RAOP_PAUSE);
+	assert(ha_state_to_raop_event("idle", HA_RAOP_NONE) == HA_RAOP_NONE);
 	assert(ha_state_to_raop_event("off", HA_RAOP_NONE) == HA_RAOP_STOP);
 	assert(ha_state_to_raop_event("unavailable", HA_RAOP_STOP) == HA_RAOP_NONE);
 
