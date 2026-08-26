@@ -61,10 +61,22 @@ tMRConfig			glMRConfig = {
 							"", 	// artwork
 					};
 
-/* ponytail: Home Assistant supplies this scoped token to the add-on. */
-static bool LoadSupervisorConfig(void) {
-	const char *token = getenv("SUPERVISOR_TOKEN");
+/* ponytail: direct HA variables cover standalone Docker; Supervisor remains the add-on default. */
+static bool LoadEnvironmentConfig(void) {
+	const char *url = getenv("HA_URL");
+	const char *token = getenv("HA_TOKEN");
 
+	if (url || token) {
+		if (!url || !*url || !token || !*token || strlen(url) >= sizeof(glHAUrl) || strlen(token) >= sizeof(glHAToken)) {
+			fprintf(stderr, "[ha] ERROR: HA_URL and HA_TOKEN must both be set\n");
+			exit(1);
+		}
+		snprintf(glHAUrl, sizeof(glHAUrl), "%s", url);
+		snprintf(glHAToken, sizeof(glHAToken), "%s", token);
+		return true;
+	}
+
+	token = getenv("SUPERVISOR_TOKEN");
 	if (!token || !*token || strlen(token) >= sizeof(glHAToken)) return false;
 	if (!*glHAUrl) snprintf(glHAUrl, sizeof(glHAUrl), "http://supervisor:80/core");
 	if (!*glHAToken) snprintf(glHAToken, sizeof(glHAToken), "%s", token);
@@ -781,7 +793,7 @@ int main(int argc, char *argv[]) {
 	setlocale(LC_NUMERIC, "C");
 
 	netsock_init();
-	bool supervisor_config;
+	bool environment_config;
 
 	// first try to find a config file on the command line
 	for (int i = 1; i < argc; i++) {
@@ -792,7 +804,7 @@ int main(int argc, char *argv[]) {
 
 	// load config from xml file
 	glConfigID = (void*) LoadConfig(glConfigName, &glMRConfig);
-	supervisor_config = LoadSupervisorConfig();
+	environment_config = LoadEnvironmentConfig();
 
 	// potentially overwrite with some cmdline parameters
 	if (!ParseArgs(argc, argv)) exit(1);
@@ -813,7 +825,7 @@ int main(int argc, char *argv[]) {
 		LOG_WARN("weird GLIBC, try -static build in case of failure");
 	}
 
-	if (!glConfigID && !supervisor_config) {
+	if (!glConfigID && !environment_config) {
 		LOG_WARN("no config file, using defaults");
 	}
 
