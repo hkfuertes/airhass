@@ -1,114 +1,28 @@
-# AirHass
+# AirHass Home Assistant add-on repository
 
-Minimal macOS runbook for Home Assistant-backed AirPlay targets.
+AirHass exposes Home Assistant `media_player` entities as AirPlay targets. It runs on the Home Assistant host, advertises targets over mDNS, and uses the Supervisor-provided API token—no long-lived access token is needed.
 
-## Credits
+## Install
 
-AirHass is based on the AirConnect/AirCast codebase by Philippe (`philippe_44`): https://github.com/philippe44/AirConnect
-This fork adds Home Assistant `media_player` discovery and AirPlay-to-Home-Assistant playback control.
+1. Push this repository to a Git URL.
+2. In Home Assistant, open **Settings → Add-ons → Add-on Store → ⋮ → Repositories**.
+3. Add that Git URL, install **AirHass**, and start it.
 
-## What this does
+## Configuration
 
-AirHass exposes Home Assistant `media_player.*` entities as AirPlay targets.
-When you stream to one of those targets, AirHass tells Home Assistant to `play_media` a direct URL like `http://<your-mac>:<port>/stream-7.flac`.
+The page has one optional multi-select field: **Hide duplicate platforms** (`exclude_platforms`). It offers `cast`, `sonos`, `dlna_dmr`, `kodi`, `mpd`, `plex`, and `yamaha_musiccast`. Native `apple_tv` and `airplay` targets are always hidden.
 
-Important:
-- Home Assistant does **not** proxy the audio.
-- The speaker/device behind that `media_player` must be able to reach the AirHass URL on your Mac over the LAN.
-- `ha_url` currently supports `http://` only.
+The add-on auto-selects the LAN interface, uses FLAC, and reads the scoped `SUPERVISOR_TOKEN` directly in C; no token is stored on disk. The final image is `scratch` and contains only the statically linked AirHass binary.
 
-## macOS quick start
+## Requirements
 
-1. Build:
-   ```sh
-   make
-   ```
-2. Copy the sample config:
-   ```sh
-   cp config.sample.xml config.xml
-   ```
-3. Edit `config.xml`:
-   - set `binding` to your Mac's LAN IP or interface
-   - set `ha_url` to your Home Assistant URL, usually `http://homeassistant.local:8123`
-   - set `ha_token` to a long-lived access token
-4. Start AirHass:
-   ```sh
-   ./bin/airhass-macos -x ./config.xml
-   ```
-   If AirCast is already advertising Chromecast devices, list HA platform ids and hide Cast targets:
-   ```sh
-   ./bin/airhass-macos -x ./config.xml --list-ha-platforms
-   ./bin/airhass-macos -x ./config.xml --no-ha-platform=cast
-   ```
-5. On the same LAN, open the AirPlay output picker on your phone/Mac and look for names matching your HA `media_player` entities.
+- Home Assistant OS or Supervised, with add-on support.
+- `amd64` or `aarch64` host.
+- The target speaker must be able to reach the Home Assistant host on the LAN; Home Assistant does not proxy the audio stream.
 
-## Minimal config
+## Local checks
 
-Use `config.sample.xml` as a template.
-
-Rules:
-- `binding` must not be `127.0.0.1` if a real speaker should reach AirHass.
-- `ha_url` + `ha_token` are both required when Home Assistant mode is enabled.
-- Leave codec as `flac` first; switch to `mp3:320` if the target fails to play the stream.
-
-## Discovering Home Assistant targets
-
-At startup AirHass fetches `/api/states` and turns every `media_player.*` into an AirPlay target.
-
-AirHass hides Home Assistant's native AirPlay platforms by default (`apple_tv,airplay`) because they already show up in AirPlay. To hide other duplicated backends, list the platform ids from your own HA registry:
 ```sh
-./bin/airhass-macos -x ./config.xml --list-ha-platforms
+make test
+docker build --build-arg BUILD_ARCH=amd64 -t airhass .
 ```
-Example output:
-```text
-HA media_player platform ids:
-  cast (4)
-  sonos (2)
-```
-Then hide the duplicate backend:
-```sh
-./bin/airhass-macos -x ./config.xml --no-ha-platform=cast
-```
-The ids are Home Assistant `RegistryEntry.platform` values, so they depend on the integrations installed in that HA instance. Native AirPlay ids (`apple_tv,airplay`) are hidden by default and omitted from this list. Common examples: `cast`, `sonos`, `dlna_dmr`, `kodi`, `mpd`, `plex`, `yamaha_musiccast`.
-
-Useful checks:
-- AirHass log should contain `Found <n> Home Assistant media_player entities`
-- AirPlay picker should show at least one target
-- If zero targets appear, verify the token, URL, and that the HA entity is really `media_player.*`
-
-Optional discovery-only run:
-```sh
-./bin/airhass-macos -x ./config.xml -i ./config.xml
-```
-That scans, writes discovered devices back to `config.xml`, and exits.
-
-## Streaming test checklist
-
-1. Start AirHass.
-2. Confirm at least one HA-backed target appears in AirPlay.
-3. Select that target and play audio.
-4. Confirm the real speaker starts playback.
-5. Stop playback from the AirPlay sender.
-6. Change volume from the AirPlay sender.
-
-Expected behavior:
-- stream: AirHass calls `media_player.play_media` with a direct stream URL
-- stop/flush: AirHass calls `media_player.media_stop`
-- volume: AirHass calls `media_player.volume_set` with a 0..1 level
-
-## Known limitations
-
-- No real-device validation is included here; credentials and speakers are required for that.
-- Home Assistant does **not** relay audio bytes. Reachability from the speaker to the Mac is mandatory.
-- `ha_url` is `http://` only right now.
-- Some HA integrations do not support direct URL playback or ignore stop/volume. If that happens, keep the entity but treat stop/volume as integration-specific limitations.
-- Native HA AirPlay entities are hidden automatically (`apple_tv,airplay`); use `--list-ha-platforms` and `--no-ha-platform=<id>` to hide other duplicated backends.
-- FLAC is the default. Try `mp3:320` when playback starts failing, the target refuses the URL, or the integration/device is picky about codecs/container support.
-
-## Human validation still required
-
-Blocked on real credentials/devices:
-- confirm a real `media_player` appears as an AirPlay target
-- confirm end-to-end playback on a real speaker
-- confirm stop and volume behavior for the specific HA integration/device
-- capture any device-specific limitations

@@ -41,8 +41,8 @@ typedef enum {
 	HA_RAOP_STOP,
 } ha_raop_event_t;
 
-/* Parse http://host[:port][/path] into *out.
- * Returns false on bad scheme, empty url, or buffer overflow.
+/* Parse http://host[:port][/path-prefix] into *out.
+ * The prefix lets the Home Assistant add-on use http://supervisor:80/core.
  * ponytail: https:// not supported; add cross_ssl BIO layer when needed */
 bool ha_url_parse(const char *url, ha_url_t *out);
 

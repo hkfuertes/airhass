@@ -25,6 +25,7 @@
 #include "mdnssvc.h"
 #include "config_ha.h"
 #include "ixml.h"
+#include "jansson.h"
 #include "ha_api.h"
 
 #define DISCOVERY_TIME 	20
@@ -60,7 +61,15 @@ tMRConfig			glMRConfig = {
 							"", 	// artwork
 					};
 
+/* ponytail: Home Assistant supplies this scoped token to the add-on. */
+static bool LoadSupervisorConfig(void) {
+	const char *token = getenv("SUPERVISOR_TOKEN");
 
+	if (!token || !*token || strlen(token) >= sizeof(glHAToken)) return false;
+	if (!*glHAUrl) snprintf(glHAUrl, sizeof(glHAUrl), "http://supervisor:80/core");
+	if (!*glHAToken) snprintf(glHAToken, sizeof(glHAToken), "%s", token);
+	return true;
+}
 
 /*----------------------------------------------------------------------------*/
 /* consts or pseudo-const*/
@@ -611,6 +620,29 @@ static bool HideHAPlatforms(const char *platforms) {
 	return true;
 }
 
+/* ponytail: one add-on setting; add more only for a demonstrated need. */
+static void LoadAddonOptions(void) {
+	json_error_t error;
+	json_t *root = json_load_file("/data/options.json", 0, &error);
+	json_t *platforms;
+
+	if (!root) return;
+	platforms = json_is_object(root) ? json_object_get(root, "exclude_platforms") : NULL;
+	for (size_t i = 0; json_is_array(platforms) && i < json_array_size(platforms); i++) {
+		const char *platform = json_string_value(json_array_get(platforms, i));
+
+		if (!platform || !*platform || strspn(platform, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_,.-") != strlen(platform)) {
+			LOG_WARN("Invalid exclude_platforms item", NULL);
+		} else if (!HideHAPlatforms(platform)) {
+			LOG_WARN("exclude_platforms setting is too long", NULL);
+			break;
+		} else {
+			LOG_INFO("Hiding additional HA platform: %s", platform);
+		}
+	}
+	json_decref(root);
+}
+
 /*---------------------------------------------------------------------------*/
 static bool ParseArgs(int argc, char **argv) {
 	char *optarg = NULL;
@@ -749,6 +781,7 @@ int main(int argc, char *argv[]) {
 	setlocale(LC_NUMERIC, "C");
 
 	netsock_init();
+	bool supervisor_config;
 
 	// first try to find a config file on the command line
 	for (int i = 1; i < argc; i++) {
@@ -759,9 +792,11 @@ int main(int argc, char *argv[]) {
 
 	// load config from xml file
 	glConfigID = (void*) LoadConfig(glConfigName, &glMRConfig);
+	supervisor_config = LoadSupervisorConfig();
 
 	// potentially overwrite with some cmdline parameters
 	if (!ParseArgs(argc, argv)) exit(1);
+	LoadAddonOptions();
 
 	// make sure port range is correct
 	if (glPortBase && !glPortRange) glPortRange = glMaxDevices*4;
@@ -778,7 +813,7 @@ int main(int argc, char *argv[]) {
 		LOG_WARN("weird GLIBC, try -static build in case of failure");
 	}
 
-	if (!glConfigID) {
+	if (!glConfigID && !supervisor_config) {
 		LOG_WARN("no config file, using defaults");
 	}
 

@@ -1,0 +1,17 @@
+.git
+.github
+bin/
+airhass/nanopb/
+**/targets/freebsd/
+**/targets/macos/
+**/targets/solaris/
+**/targets/win32/
+**/targets/linux/arm*/
+**/targets/linux/mips*/
+**/targets/linux/powerpc/
+**/targets/linux/sparc64/
+**/targets/linux/x86/
+**/*.cmd
+**/*.sln
+**/*.vcxproj
+**/*.vcxproj.filters

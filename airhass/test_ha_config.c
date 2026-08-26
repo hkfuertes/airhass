@@ -33,7 +33,7 @@ int main(void) {
 	      ha_url_parse("http://homeassistant.local:8123", &u));
 	CHECK("host extracted",   strcmp(u.host, "homeassistant.local") == 0);
 	CHECK("port extracted",   u.port == 8123);
-	CHECK("path is /api/",    strcmp(u.path, "/api/") == 0);
+	CHECK("no prefix",        strcmp(u.path, "") == 0);
 
 	/* 2. URL without explicit port → default 8123 */
 	CHECK("no-port URL parses",
@@ -47,13 +47,19 @@ int main(void) {
 	CHECK("host with slash",  strcmp(u.host, "hassio.local") == 0);
 	CHECK("port with slash",  u.port == 8123);
 
-	/* 4. bad scheme */
+	/* 4. Home Assistant Supervisor proxy */
+	CHECK("supervisor proxy parses", ha_url_parse("http://supervisor:80/core", &u));
+	CHECK("supervisor host", strcmp(u.host, "supervisor") == 0);
+	CHECK("supervisor port", u.port == 80);
+	CHECK("supervisor prefix", strcmp(u.path, "/core") == 0);
+
+	/* 5. bad scheme */
 	CHECK("https rejected",   !ha_url_parse("https://hassio.local", &u));
 
-	/* 5. empty string */
+	/* 6. empty string */
 	CHECK("empty rejected",   !ha_url_parse("", &u));
 
-	/* 6. missing host */
+	/* 7. missing host */
 	CHECK("bare scheme rejected", !ha_url_parse("http://", &u));
 
 	fprintf(stderr, "\n=== config validation logic ===\n");
