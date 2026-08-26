@@ -64,7 +64,6 @@ struct sMR {
 	pthread_t 		Thread;
 	double			Volume;
 	uint32_t			VolumeStampRx, VolumeStampTx;
-	char			NowPlaying[3*STR_LEN];
 };
 
 extern int32_t				glLogLimit;

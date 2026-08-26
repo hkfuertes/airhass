@@ -807,54 +807,6 @@ bool ha_set_volume(const char *url, const char *token, const char *entity_id, do
 }
 
 /*----------------------------------------------------------------------------*/
-bool ha_build_now_playing_payload(const char *state, const char *artist, const char *album,
-                                  const char *title, const char *entity_picture,
-                                  char *out, size_t out_len) {
-	json_t *root, *attrs;
-	char *json;
-	bool ok;
-
-	if (!state || !*state || !out || !out_len) return false;
-	root = json_object();
-	attrs = json_object();
-	if (!root || !attrs) {
-		if (root) json_decref(root);
-		if (attrs) json_decref(attrs);
-		return false;
-	}
-
-	json_object_set_new_nocheck(root, "state", json_string(state));
-	if (artist && *artist) json_object_set_new_nocheck(attrs, "media_artist", json_string(artist));
-	if (album && *album) json_object_set_new_nocheck(attrs, "media_album_name", json_string(album));
-	if (title && *title) json_object_set_new_nocheck(attrs, "media_title", json_string(title));
-	if (entity_picture && *entity_picture) json_object_set_new_nocheck(attrs, "entity_picture", json_string(entity_picture));
-	json_object_set_new_nocheck(root, "attributes", attrs);
-
-	json = json_dumps(root, JSON_COMPACT);
-	json_decref(root);
-	if (!json) return false;
-
-	ok = snprintf(out, out_len, "%s", json) < (int) out_len;
-	free(json);
-	return ok;
-}
-
-/*----------------------------------------------------------------------------*/
-bool ha_set_now_playing(const char *url, const char *token, const char *entity_id, const char *state,
-                        const char *artist, const char *album, const char *title, const char *entity_picture) {
-	char path[320], payload[2048];
-
-	if (!entity_id || !*entity_id || !state || !*state) return false;
-	if (snprintf(path, sizeof(path), "/api/states/%s", entity_id) >= (int) sizeof(path)) return false;
-	if (!ha_build_now_playing_payload(state, artist, album, title, entity_picture, payload, sizeof(payload))) {
-		fprintf(stderr, "[ha] ERROR: cannot build now-playing payload for %s\n", entity_id);
-		return false;
-	}
-
-	return ha_call_service(url, token, path, payload, entity_id);
-}
-
-/*----------------------------------------------------------------------------*/
 bool ha_ping(const char *url, const char *token) {
 	int status = 0;
 	char line[128] = "";
