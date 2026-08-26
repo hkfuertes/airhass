@@ -1,0 +1,4 @@
+configuration:
+  exclude_platforms:
+    name: Ocultar plataformas duplicadas
+    description: Selecciona las integraciones cuyos media_player no quieres exponer como destinos AirPlay. apple_tv y airplay siempre se ocultan.

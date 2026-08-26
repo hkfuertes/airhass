@@ -25,6 +25,17 @@
 #define HA_ENTITY_PREFIX "media_player."
 
 /*----------------------------------------------------------------------------*/
+static bool ha_url_join_path(const ha_url_t *url, const char *path, char *out, size_t out_len) {
+	const char *base = url->path;
+	const char *suffix = path ? path : "";
+	int len;
+
+	if (!*base) len = snprintf(out, out_len, "%s", *suffix ? suffix : "/");
+	else len = snprintf(out, out_len, "%s%s%s", base, *suffix && suffix[0] != '/' ? "/" : "", suffix);
+	return len >= 0 && (size_t) len < out_len;
+}
+
+/*----------------------------------------------------------------------------*/
 static bool ha_http_request(const char *method, const char *url, const char *token, const char *path,
                             const char *body_in, const char *content_type,
                             char **body_out, int *status_out, char *line, size_t line_len) {
@@ -38,9 +49,10 @@ static bool ha_http_request(const char *method, const char *url, const char *tok
 
 	if (body_out) *body_out = NULL;
 	if (status_out) *status_out = 0;
+	char request_path[sizeof(u.path)];
+
 	if (line && line_len) *line = '\0';
-	if (!ha_url_parse(url, &u)) return false;
-	if (path && *path) snprintf(u.path, sizeof(u.path), "%s", path);
+	if (!ha_url_parse(url, &u) || !ha_url_join_path(&u, path, request_path, sizeof(request_path))) return false;
 
 	char port_str[8];
 	snprintf(port_str, sizeof(port_str), "%d", u.port);
@@ -81,7 +93,7 @@ static bool ha_http_request(const char *method, const char *url, const char *tok
 		             "Connection: close\r\n"
 		             "\r\n"
 		             "%s",
-		             method, u.path, u.host, u.port, token, content_type, body_len, body_data) < 0) goto done;
+		             method, request_path, u.host, u.port, token, content_type, body_len, body_data) < 0) goto done;
 	} else {
 		if (asprintf(&req,
 		             "%s %s HTTP/1.0\r\n"
@@ -89,7 +101,7 @@ static bool ha_http_request(const char *method, const char *url, const char *tok
 		             "Authorization: Bearer %s\r\n"
 		             "Connection: close\r\n"
 		             "\r\n",
-		             method, u.path, u.host, u.port, token) < 0) goto done;
+		             method, request_path, u.host, u.port, token) < 0) goto done;
 	}
 
 	if (send(fd, req, strlen(req), 0) < 0) {
@@ -245,7 +257,11 @@ static int ha_ws_connect(const char *url) {
 	size_t used = 0;
 	int fd = -1;
 
-	if (!ha_url_parse(url, &u)) return -1;
+	char request_path[sizeof(u.path)];
+
+	if (!ha_url_parse(url, &u) ||
+	    !ha_url_join_path(&u, !strcmp(u.path, "/core") ? "/websocket" : "/api/websocket",
+	                      request_path, sizeof(request_path))) return -1;
 	char port_str[8];
 	snprintf(port_str, sizeof(port_str), "%d", u.port);
 
@@ -262,13 +278,13 @@ static int ha_ws_connect(const char *url) {
 	freeaddrinfo(res);
 
 	if (asprintf(&req,
-	             "GET /api/websocket HTTP/1.1\r\n"
+	             "GET %s HTTP/1.1\r\n"
 	             "Host: %s:%d\r\n"
 	             "Upgrade: websocket\r\n"
 	             "Connection: Upgrade\r\n"
 	             "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
 	             "Sec-WebSocket-Version: 13\r\n\r\n",
-	             u.host, u.port) < 0) {
+	             request_path, u.host, u.port) < 0) {
 		close(fd);
 		return -1;
 	}
@@ -469,35 +485,45 @@ bool ha_url_parse(const char *url, ha_url_t *out) {
 	}
 
 	const char *after_scheme = url + 7;
-
-	/* find optional path separator */
 	const char *slash = strchr(after_scheme, '/');
-	/* find optional port separator (must be before slash) */
 	const char *colon = strchr(after_scheme, ':');
-	if (colon && slash && colon > slash) colon = NULL; /* colon is inside path */
+	const char *authority_end = slash ? slash : after_scheme + strlen(after_scheme);
+	char *port_end;
+	long port;
 
-	int host_len;
+	if (colon && colon > authority_end) colon = NULL;
 	if (colon) {
-		host_len = (int) (colon - after_scheme);
-		out->port = atoi(colon + 1);
-		if (out->port <= 0 || out->port > 65535) {
+		port = strtol(colon + 1, &port_end, 10);
+		if (port_end != authority_end || port <= 0 || port > 65535) {
 			fprintf(stderr, "[ha] ERROR: invalid port in URL\n");
 			return false;
 		}
+		out->port = (int) port;
+		authority_end = colon;
 	} else {
-		host_len = slash ? (int) (slash - after_scheme) : (int) strlen(after_scheme);
 		out->port = HA_DEFAULT_PORT;
 	}
 
-	if (host_len <= 0 || host_len >= (int) sizeof(out->host)) {
+	if (authority_end == after_scheme || authority_end - after_scheme >= (int) sizeof(out->host)) {
 		fprintf(stderr, "[ha] ERROR: host too long or empty\n");
 		return false;
 	}
-	memcpy(out->host, after_scheme, host_len);
-	out->host[host_len] = '\0';
+	memcpy(out->host, after_scheme, (size_t) (authority_end - after_scheme));
+	out->host[authority_end - after_scheme] = '\0';
 
-	/* always ping /api/ regardless of any trailing path in the config URL */
-	snprintf(out->path, sizeof(out->path), "/api/");
+	if (!slash) {
+		out->path[0] = '\0';
+	} else {
+		size_t path_len = strlen(slash);
+		while (path_len > 1 && slash[path_len - 1] == '/') path_len--;
+		if (path_len >= sizeof(out->path)) {
+			fprintf(stderr, "[ha] ERROR: path too long\n");
+			return false;
+		}
+		memcpy(out->path, slash, path_len);
+		out->path[path_len] = '\0';
+		if (!strcmp(out->path, "/")) out->path[0] = '\0';
+	}
 
 	return true;
 }

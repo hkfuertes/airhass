@@ -1,0 +1,4 @@
+configuration:
+  exclude_platforms:
+    name: Hide duplicate platforms
+    description: Select integrations whose media_player entities should not be exposed as AirPlay targets. apple_tv and airplay are always hidden.

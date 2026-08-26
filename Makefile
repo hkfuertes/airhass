@@ -1,29 +1,25 @@
-# AirHass root Makefile — detects macOS arch and delegates to airhass/
-# ponytail: plain make, no cmake/autotools needed
-
-ARCH   := $(shell uname -m)
-HOST   := macos
+# Local build/check helpers for the source bundled in the Home Assistant add-on.
+ARCH := $(shell uname -m)
+HOST ?= $(if $(filter Darwin,$(shell uname -s)),macos,linux)
 PLATFORM ?= $(ARCH)
-CC ?= clang
+CC ?= cc
 TEST_BIN_DIR := bin/$(HOST)/$(PLATFORM)
 JANSSON := airhass/libjansson/targets/$(HOST)/$(PLATFORM)
+TESTS := test_ha_codec test_ha_config test_ha_entities test_ha_play_media test_ha_reverse_control test_ha_volume
+TEST_BINS := $(addprefix $(TEST_BIN_DIR)/,$(TESTS))
 
-.PHONY: all clean test_ha_reverse_control test_ha_volume
+.PHONY: all clean test $(TESTS)
 
 all:
 	$(MAKE) -C airhass HOST=$(HOST) PLATFORM=$(PLATFORM) CC=$(CC)
 
-test_ha_reverse_control: $(TEST_BIN_DIR)/test_ha_reverse_control
+test: $(TEST_BINS)
+	@for test in $(TEST_BINS); do ./$$test; done
+
+$(TESTS): %: $(TEST_BIN_DIR)/%
 	./$<
 
-test_ha_volume: $(TEST_BIN_DIR)/test_ha_volume
-	./$<
-
-$(TEST_BIN_DIR)/test_ha_reverse_control: airhass/test_ha_reverse_control.c airhass/src/ha_api.c
-	@mkdir -p $(TEST_BIN_DIR)
-	$(CC) -std=gnu11 -Wall -I airhass/src -I $(JANSSON)/include $^ $(JANSSON)/libjansson.a -o $@
-
-$(TEST_BIN_DIR)/test_ha_volume: airhass/test_ha_volume.c airhass/src/ha_api.c
+$(TEST_BIN_DIR)/test_ha_%: airhass/test_ha_%.c airhass/src/ha_api.c
 	@mkdir -p $(TEST_BIN_DIR)
 	$(CC) -std=gnu11 -Wall -I airhass/src -I $(JANSSON)/include $^ $(JANSSON)/libjansson.a -o $@
 

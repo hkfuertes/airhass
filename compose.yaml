@@ -1,0 +1,8 @@
+services:
+  airhass:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      HA_URL: http://homeassistant.local:8123
+      HA_TOKEN: ${HA_TOKEN:?HA_TOKEN is required}
