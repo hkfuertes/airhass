@@ -11,29 +11,26 @@
 int main(void) {
 	char payload[2048];
 
-	assert(ha_build_now_playing_payload("Macaco - Hijos de un Mismo Dios",
+	assert(ha_build_now_playing_payload("playing",
 	                                    "Macaco", "Hijos de un Mismo Dios", "Hijos de un Mismo Dios",
-	                                    "media_player.kitchen", "http://192.168.1.10:1234/ab12.jpg",
-	                                    "Kitchen", payload, sizeof(payload)));
-	assert(strstr(payload, "\"state\":\"Macaco - Hijos de un Mismo Dios\""));
-	assert(strstr(payload, "\"artist\":\"Macaco\""));
-	assert(strstr(payload, "\"album\":\"Hijos de un Mismo Dios\""));
-	assert(strstr(payload, "\"title\":\"Hijos de un Mismo Dios\""));
-	assert(strstr(payload, "\"media_player\":\"media_player.kitchen\""));
+	                                    "http://192.168.1.10:1234/ab12.jpg",
+	                                    payload, sizeof(payload)));
+	assert(strstr(payload, "\"state\":\"playing\""));
+	assert(strstr(payload, "\"media_artist\":\"Macaco\""));
+	assert(strstr(payload, "\"media_album_name\":\"Hijos de un Mismo Dios\""));
+	assert(strstr(payload, "\"media_title\":\"Hijos de un Mismo Dios\""));
 	assert(strstr(payload, "\"entity_picture\":\"http://192.168.1.10:1234/ab12.jpg\""));
-	assert(strstr(payload, "\"friendly_name\":\"Kitchen Now Playing\""));
 
 	/* optional fields omitted */
-	assert(ha_build_now_playing_payload("Solo title", NULL, NULL, "Solo title",
-	                                    "media_player.kitchen", NULL, NULL, payload, sizeof(payload)));
-	assert(strstr(payload, "\"state\":\"Solo title\""));
-	assert(!strstr(payload, "artist"));
+	assert(ha_build_now_playing_payload("paused", NULL, NULL, "Solo title", NULL, payload, sizeof(payload)));
+	assert(strstr(payload, "\"state\":\"paused\""));
+	assert(strstr(payload, "\"media_title\":\"Solo title\""));
+	assert(!strstr(payload, "media_artist"));
 	assert(!strstr(payload, "entity_picture"));
-	assert(!strstr(payload, "friendly_name"));
 
 	/* state is mandatory */
-	assert(!ha_build_now_playing_payload("", NULL, NULL, "t", NULL, NULL, NULL, payload, sizeof(payload)));
-	assert(!ha_build_now_playing_payload(NULL, NULL, NULL, "t", NULL, NULL, NULL, payload, sizeof(payload)));
+	assert(!ha_build_now_playing_payload("", NULL, NULL, "t", NULL, payload, sizeof(payload)));
+	assert(!ha_build_now_playing_payload(NULL, NULL, NULL, "t", NULL, payload, sizeof(payload)));
 
 	puts("PASS test_ha_now_playing");
 	return 0;

@@ -19,7 +19,7 @@ The page has one optional multi-select field: **Hide duplicate platforms** (`exc
 
 The add-on auto-selects the LAN interface, uses FLAC, and reads the scoped `SUPERVISOR_TOKEN` directly in C; no token is stored on disk. The final image is `scratch` and contains only the statically linked AirHass binary.
 
-While streaming, AirHass also reports the current track to `sensor.airhass_<player>_now_playing` (state `artist - title`, with album, title, artist, and cover attributes).
+While streaming, AirHass also writes the current track onto the `media_player` entity itself (`media_title`, `media_artist`, `media_album_name`, cover) — the owning integration may overwrite those attributes until the next track.
 
 ## Requirements
 

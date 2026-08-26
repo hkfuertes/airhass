@@ -113,14 +113,14 @@ bool ha_stop_media(const char *url, const char *token, const char *entity_id);
 /* POST /api/services/media_player/volume_set using 0..1 scale. */
 bool ha_set_volume(const char *url, const char *token, const char *entity_id, double volume_level);
 
-/* Build the JSON body for POST /api/states/<sensor> with now-playing attributes.
+/* Build the JSON body for POST /api/states/<media_player> with now-playing attributes.
  * Returns false on invalid args or buffer overflow. */
 bool ha_build_now_playing_payload(const char *state, const char *artist, const char *album,
-                                  const char *title, const char *media_player, const char *entity_picture,
-                                  const char *player_name, char *out, size_t out_len);
+                                  const char *title, const char *entity_picture,
+                                  char *out, size_t out_len);
 
-/* POST /api/states/sensor.airhass_<object_id>_now_playing with the AirPlay track metadata.
- * entity_id is the full media_player id; the sensor name is derived from it. */
-bool ha_set_now_playing(const char *url, const char *token, const char *entity_id,
-                        const char *artist, const char *album, const char *title, const char *entity_picture,
-                        const char *player_name);
+/* POST /api/states/<entity_id> to attach AirPlay track metadata to the media_player.
+ * ponytail: injects attributes into an integration-owned entity; the integration may
+ * overwrite them until the next track, and injected state does not survive HA restart. */
+bool ha_set_now_playing(const char *url, const char *token, const char *entity_id, const char *state,
+                        const char *artist, const char *album, const char *title, const char *entity_picture);
