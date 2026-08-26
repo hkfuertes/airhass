@@ -2,6 +2,11 @@
 
 AirHass exposes Home Assistant `media_player` entities as AirPlay targets. It runs on the Home Assistant host, advertises targets over mDNS, and uses the Supervisor-provided API token—no long-lived access token is needed.
 
+## Credits
+
+AirHass is based on the AirConnect/AirCast codebase by Philippe (`philippe_44`): https://github.com/philippe44/AirConnect
+This fork adds Home Assistant `media_player` discovery and AirPlay-to-Home-Assistant playback control.
+
 ## Install
 
 1. Push this repository to a Git URL.
