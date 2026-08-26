@@ -809,7 +809,7 @@ bool ha_set_volume(const char *url, const char *token, const char *entity_id, do
 /*----------------------------------------------------------------------------*/
 bool ha_build_now_playing_payload(const char *state, const char *artist, const char *album,
                                   const char *title, const char *media_player, const char *entity_picture,
-                                  char *out, size_t out_len) {
+                                  const char *player_name, char *out, size_t out_len) {
 	json_t *root, *attrs;
 	char *json;
 	bool ok;
@@ -829,6 +829,11 @@ bool ha_build_now_playing_payload(const char *state, const char *artist, const c
 	if (title && *title) json_object_set_new_nocheck(attrs, "title", json_string(title));
 	if (media_player && *media_player) json_object_set_new_nocheck(attrs, "media_player", json_string(media_player));
 	if (entity_picture && *entity_picture) json_object_set_new_nocheck(attrs, "entity_picture", json_string(entity_picture));
+	if (player_name && *player_name) {
+		char friendly[512];
+		snprintf(friendly, sizeof(friendly), "%s Now Playing", player_name);
+		json_object_set_new_nocheck(attrs, "friendly_name", json_string(friendly));
+	}
 	json_object_set_new_nocheck(root, "attributes", attrs);
 
 	json = json_dumps(root, JSON_COMPACT);
@@ -842,7 +847,8 @@ bool ha_build_now_playing_payload(const char *state, const char *artist, const c
 
 /*----------------------------------------------------------------------------*/
 bool ha_set_now_playing(const char *url, const char *token, const char *entity_id,
-                        const char *artist, const char *album, const char *title, const char *entity_picture) {
+                        const char *artist, const char *album, const char *title, const char *entity_picture,
+                        const char *player_name) {
 	char state[256], path[320], payload[2048];
 	const char *object_id;
 
@@ -856,7 +862,7 @@ bool ha_set_now_playing(const char *url, const char *token, const char *entity_i
 	else return false;
 
 	if (snprintf(path, sizeof(path), "/api/states/sensor.airhass_%s_now_playing", object_id) >= (int) sizeof(path)) return false;
-	if (!ha_build_now_playing_payload(state, artist, album, title, entity_id, entity_picture, payload, sizeof(payload))) {
+	if (!ha_build_now_playing_payload(state, artist, album, title, entity_id, entity_picture, player_name, payload, sizeof(payload))) {
 		fprintf(stderr, "[ha] ERROR: cannot build now-playing payload for %s\n", entity_id);
 		return false;
 	}

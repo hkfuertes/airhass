@@ -117,9 +117,10 @@ bool ha_set_volume(const char *url, const char *token, const char *entity_id, do
  * Returns false on invalid args or buffer overflow. */
 bool ha_build_now_playing_payload(const char *state, const char *artist, const char *album,
                                   const char *title, const char *media_player, const char *entity_picture,
-                                  char *out, size_t out_len);
+                                  const char *player_name, char *out, size_t out_len);
 
 /* POST /api/states/sensor.airhass_<object_id>_now_playing with the AirPlay track metadata.
  * entity_id is the full media_player id; the sensor name is derived from it. */
 bool ha_set_now_playing(const char *url, const char *token, const char *entity_id,
-                        const char *artist, const char *album, const char *title, const char *entity_picture);
+                        const char *artist, const char *album, const char *title, const char *entity_picture,
+                        const char *player_name);
