@@ -60,6 +60,7 @@ struct sMR {
 	char UDN	   	[RESOURCE_LENGTH];
 	char Name		[STR_LEN];
 	enum eMRstate 	State;
+	int				StopDebounce;
 	pthread_mutex_t Mutex;
 	pthread_t 		Thread;
 	double			Volume;

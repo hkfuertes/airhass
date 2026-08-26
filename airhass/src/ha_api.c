@@ -664,11 +664,22 @@ ha_raop_event_t ha_state_to_raop_event(const char *state, ha_raop_event_t curren
 	if (state && !strcasecmp(state, "paused")) {
 		return current == HA_RAOP_PLAY ? HA_RAOP_PAUSE : HA_RAOP_NONE;
 	}
-	if (state && (!strcasecmp(state, "idle") || !strcasecmp(state, "off") || !strcasecmp(state, "unavailable"))) {
+	if (state && !strcasecmp(state, "idle")) {
+		// ponytail: idle flaps spuriously on URL streams (Alexa-class); pause, never kill the session
+		return current == HA_RAOP_PLAY ? HA_RAOP_PAUSE : HA_RAOP_NONE;
+	}
+	if (state && (!strcasecmp(state, "off") || !strcasecmp(state, "unavailable"))) {
 		return current == HA_RAOP_STOP ? HA_RAOP_NONE : HA_RAOP_STOP;
 	}
 
 	return HA_RAOP_NONE;
+}
+
+/*----------------------------------------------------------------------------*/
+bool ha_debounce_reached(int *counter, int limit) {
+	if (++(*counter) < limit) return false;
+	*counter = 0;
+	return true;
 }
 
 /*----------------------------------------------------------------------------*/

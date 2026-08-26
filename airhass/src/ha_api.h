@@ -74,8 +74,13 @@ bool ha_fetch_media_player_state(const char *url, const char *token, const char 
                                  ha_media_player_state_t *out);
 
 /* Map HA transport state to the next RAOP-side action.
- * ponytail: current is last known RAOP-facing state, enough to suppress repeats. */
+ * ponytail: current is last known RAOP-facing state, enough to suppress repeats.
+ * idle maps to PAUSE (recoverable); only off/unavailable stops the session. */
 ha_raop_event_t ha_state_to_raop_event(const char *state, ha_raop_event_t current);
+
+/* Debounce a decision: increments *counter, returns true once it reaches limit
+ * (then resets to 0). Caller resets *counter on non-matching states. */
+bool ha_debounce_reached(int *counter, int limit);
 
 /* Map codec config (e.g. flac, mp3:320, aac:256, wav) to stream URL extension.
  * Unknown/empty codecs fall back to flac. */

@@ -31,6 +31,7 @@
 #define DISCOVERY_TIME 	20
 #define MEDIA_VOLUME	0.5
 #define HA_POLL		2000
+#define HA_STOP_DEBOUNCE 5
 
 /*----------------------------------------------------------------------------*/
 /* globals */
@@ -302,11 +303,19 @@ static void *HAThread(void *args) {
 				break;
 			}
 
+			if (next_state != STOPPED) p->StopDebounce = 0;
+
 			if (next_state != p->State) {
 				action = ha_state_to_raop_event(remote.state,
 				                               p->RaopState == RAOP_PLAY ? HA_RAOP_PLAY :
 				                               p->RaopState == RAOP_STOP ? HA_RAOP_STOP : HA_RAOP_NONE);
-				p->State = next_state;
+				// ponytail: act on stopped-class states only after ~10s sustained;
+				// Alexa-class players flap playing/idle during normal playback
+				if (next_state == STOPPED && !ha_debounce_reached(&p->StopDebounce, HA_STOP_DEBOUNCE)) {
+					action = HA_RAOP_NONE;
+				} else {
+					p->State = next_state;
+				}
 			}
 
 			if (action != HA_RAOP_NONE) {
@@ -425,6 +434,7 @@ static bool AddHADevice(struct sMR *Device, const ha_entity_t *Entity, bool forc
 	Device->Magic		= MAGIC;
 	Device->Running		= true;
 	Device->State 		= STOPPED;
+	Device->StopDebounce = 0;
 	Device->Volume 		= 0;
 	Device->Raop 		= NULL;
 	Device->RaopState	= RAOP_STOP;
