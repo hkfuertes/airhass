@@ -22,10 +22,10 @@ The add-on auto-selects the LAN interface, uses FLAC, and reads the scoped `SUPE
 
 ## Standalone Docker
 
-Outside the add-on, AirHass needs a direct Home Assistant URL and a long-lived access token instead of `SUPERVISOR_TOKEN`:
+Outside the add-on, AirHass needs a direct Home Assistant URL and a long-lived access token instead of `SUPERVISOR_TOKEN`. GitHub Actions publishes the prebuilt image to GHCR (`ghcr.io/hkfuertes/airhass`), so no local compile is needed:
 
 ```sh
-HA_TOKEN=<long-lived-token> docker compose up --build
+HA_TOKEN=<long-lived-token> docker compose up
 ```
 
 `compose.yaml` sets `HA_URL`/`HA_TOKEN` and `network_mode: host` (required for AirPlay/mDNS, Linux only). If only one of `HA_URL`/`HA_TOKEN` is set, AirHass refuses to start. `SUPERVISOR_TOKEN` only works with the add-on's internal Supervisor proxy, not standalone.

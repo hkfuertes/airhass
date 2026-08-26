@@ -1,6 +1,7 @@
 services:
   airhass:
-    build: .
+    # Prebuilt by GitHub Actions; replace with `build: .` to compile locally.
+    image: ghcr.io/hkfuertes/airhass:latest
     network_mode: host
     restart: unless-stopped
     environment:
