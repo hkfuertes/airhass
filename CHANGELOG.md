@@ -1,8 +1,12 @@
 # Changelog
 
+## 1.13.0
+
+- Remove now-playing reporting (sensor and media_player attribute injection). Playback, stop and volume only. Leftover `sensor.airhass_*` entities disappear on HA restart.
+
 ## 1.12.0
 
-- Write now-playing metadata (title/artist/album/cover) onto the `media_player` entity itself instead of a separate sensor. The owning integration may overwrite attributes until the next track; stale `sensor.airhass_*` entities disappear on HA restart.
+- Write now-playing metadata (title/artist/album/cover) onto the `media_player` entity itself instead of a separate sensor.
 
 ## 1.11.1
 

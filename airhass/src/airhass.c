@@ -275,29 +275,6 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 			Device->RaopState = event;
 			break;
 		}
-		case RAOP_METADATA: {
-			raopsr_metadata_t *meta = va_arg(args, raopsr_metadata_t*);
-			char key[3*STR_LEN];
-			char *artwork_url = NULL;
-
-			if (!meta) break;
-			snprintf(key, sizeof(key), "%s|%s|%s",
-			         meta->artist ? meta->artist : "", meta->album ? meta->album : "",
-			         meta->title ? meta->title : "");
-			// ponytail: dedup repeated metadata pushes, HA state updates are cheap but noisy
-			if (!strcmp(key, Device->NowPlaying)) break;
-			strcpy(Device->NowPlaying, key);
-
-			if (meta->artwork) (void)!asprintf(&artwork_url, "http://%s:%u%s", inet_ntoa(glHost), glPicoPort, meta->artwork);
-			const char *ha_state = Device->RaopState == RAOP_PLAY ? "playing" :
-			                       Device->RaopState == RAOP_PAUSE ? "paused" : "idle";
-			if (ha_set_now_playing(glHAUrl, glHAToken, entity_id, ha_state, meta->artist, meta->album, meta->title, artwork_url)) {
-				LOG_INFO("[%p]: Home Assistant now_playing %s -> %s - %s", Device, entity_id,
-				         meta->artist ? meta->artist : "?", meta->title ? meta->title : "?");
-			}
-			free(artwork_url);
-			break;
-		}
 		default:
 			break;
 	}
