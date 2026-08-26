@@ -5,7 +5,7 @@ PLATFORM ?= $(ARCH)
 CC ?= cc
 TEST_BIN_DIR := bin/$(HOST)/$(PLATFORM)
 JANSSON := airhass/libjansson/targets/$(HOST)/$(PLATFORM)
-TESTS := test_ha_codec test_ha_config test_ha_entities test_ha_play_media test_ha_reverse_control test_ha_volume
+TESTS := test_ha_codec test_ha_config test_ha_entities test_ha_now_playing test_ha_play_media test_ha_reverse_control test_ha_volume
 TEST_BINS := $(addprefix $(TEST_BIN_DIR)/,$(TESTS))
 
 .PHONY: all clean test $(TESTS)
