@@ -1,5 +1,5 @@
 ARG BUILD_ARCH=
-ARG TARGETARCH=amd64
+ARG TARGETARCH
 ARG BUILD_VERSION=1.10.1
 
 FROM debian:bookworm-slim AS build
@@ -13,10 +13,10 @@ RUN apt-get update \
 WORKDIR /build
 COPY . .
 
-RUN case "${BUILD_ARCH:-${TARGETARCH}}" in \
+RUN case "${BUILD_ARCH:-${TARGETARCH:-amd64}}" in \
         amd64) platform=x86_64 ;; \
         aarch64|arm64) platform=aarch64 ;; \
-        *) echo "Unsupported architecture: ${BUILD_ARCH:-${TARGETARCH}}" >&2; exit 1 ;; \
+        *) echo "Unsupported architecture: ${BUILD_ARCH:-${TARGETARCH:-amd64}}" >&2; exit 1 ;; \
     esac \
     && mkdir -p "bin/linux/${platform}" \
     && make -C airhass HOST=linux PLATFORM="${platform}" CC=gcc "../bin/airhass-linux-${platform}-static" \
@@ -30,7 +30,7 @@ ARG BUILD_VERSION
 LABEL \
     io.hass.version="${BUILD_VERSION}" \
     io.hass.type="app" \
-    io.hass.arch="${BUILD_ARCH:-${TARGETARCH}}"
+    io.hass.arch="${BUILD_ARCH:-${TARGETARCH:-amd64}}"
 
 COPY --from=build /out/airhass /airhass
 ENTRYPOINT [ "/airhass", "-Z" ]
